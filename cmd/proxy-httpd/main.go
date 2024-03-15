@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/golang-io/requests"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -11,7 +12,7 @@ import (
 
 func main() {
 	var addr string
-	flag.StringVar(&addr, "http", "0.0.0.0:8080", "监听端口")
+	flag.StringVar(&addr, "http", "0.0.0.0:60001", "监听端口")
 	flag.Parse()
 
 	server := &http.Server{
@@ -26,14 +27,21 @@ func main() {
 
 type proxyHandler struct{}
 
+var sess = requests.New()
+
 func (p *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	status, now := http.StatusBadGateway, time.Now()
 	defer func() {
 		_, _ = fmt.Fprintf(os.Stdout, "%-18s -> %s [%d] cost: %.2fs\n", r.RemoteAddr, r.RequestURI, status, time.Since(now).Seconds())
 	}()
-	proxy := &httputil.ReverseProxy{}
+	proxy := &httputil.ReverseProxy{
+		//Transport: sess.RoundTrip(requests.Logf(requests.LogS)),
+	}
 
-	proxy.Director = func(req *http.Request) {}
+	proxy.Director = func(req *http.Request) {
+		req.URL.Scheme = "https" // unsupported protocol scheme ""
+		req.RequestURI = ""      // MUST: Request.RequestURI can't be set in client requests
+	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		status = resp.StatusCode
 		return nil

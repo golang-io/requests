@@ -5,10 +5,12 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -57,6 +59,13 @@ func newOptions(opts ...Option) Options {
 		o(&opt)
 	}
 	return opt
+}
+
+func withOptions(opt1s, opt2s []Option) Options {
+	opts := make([]Option, 0, len(opt1s)+len(opt2s))
+	opts = append(opts, opt1s...)
+	opts = append(opts, opt2s...)
+	return newOptions(opts...)
 }
 
 // Method http method
@@ -252,33 +261,17 @@ func Proxy(addr string) Option {
 	return func(o *Options) {
 		if proxyURL, err := url.Parse(addr); err == nil {
 			o.Proxy = http.ProxyURL(proxyURL)
+		} else {
+			panic("parse proxy addr: " + err.Error())
 		}
 	}
 }
 
-// Copy options
-func (opt Options) Copy() Options {
-	options := newOptions()
-	options.Method = opt.Method
-	options.URL = opt.URL
-	options.Path = append(options.Path, opt.Path...)
-	options.Cookies = append(options.Cookies, opt.Cookies...)
-	options.body = opt.body
-	options.Timeout = opt.Timeout
-	options.MaxConns = opt.MaxConns
-	options.TraceLv = opt.TraceLv
-	options.Verify = opt.Verify
-	options.Logf = opt.Logf
-	options.LocalAddr = opt.LocalAddr
-	options.Stream = opt.Stream
-	for k, v := range opt.Params {
-		options.Params[k] = v
-	}
-	for k, v := range opt.Header {
-		options.Header.Add(k, v[0])
-	}
-	options.RequestEach = append(options.RequestEach, opt.RequestEach...)
-	options.ResponseEach = append(options.ResponseEach, opt.ResponseEach...)
+func LogS(ctx context.Context, stat Stat) {
+	fmt.Fprintf(os.Stdout, "%s\n", stat)
+}
 
-	return options
+func StreamS(i int64, raw []byte) error {
+	_, err := fmt.Fprintf(os.Stdout, "i=%d, raw=%s", i, raw)
+	return err
 }

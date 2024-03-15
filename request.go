@@ -65,11 +65,5 @@ func NewRequestWithContext(ctx context.Context, options Options) (*http.Request,
 		req.AddCookie(&cookie)
 	}
 
-	for _, each := range options.RequestEach {
-		if err := each(ctx, req); err != nil {
-			return req, fmt.Errorf("requestEach: %w", err)
-		}
-	}
-
 	return req, nil
 }

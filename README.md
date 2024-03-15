@@ -56,5 +56,7 @@ func main() {
 * Keep-Alive & Connection Pooling
 * Sessions with Cookie Persistence
 * Basic & Digest Authentication
+* Implement http.RoundTripper fully compatible `net/http`
+
 
 ## API Reference and User Guide available on [Read the Docs](https://pkg.go.dev/github.com/golang-io/requests)

@@ -3,9 +3,7 @@ package requests
 import (
 	"crypto/tls"
 	"fmt"
-	"net/http"
 	"net/http/httptrace"
-	"net/http/httputil"
 	"net/textproto"
 	"os"
 )
@@ -120,32 +118,6 @@ var trace = &httptrace.ClientTrace{
 	},
 }
 
-// DebugTrace trace a request
-func (s *Session) DebugTrace(req *http.Request, v int, limit int) (*http.Response, error) {
-	ctx := httptrace.WithClientTrace(req.Context(), trace)
-	req2 := req.WithContext(ctx)
-	reqLog, err := DumpRequest(req2)
-	if err != nil {
-		Log("request error: %w", err)
-		return nil, err
-	}
-	resp, err := s.Transport.RoundTrip(req2)
-	if v >= 2 {
-		Log(show(reqLog, "> ", limit))
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	respLog, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		return nil, err
-	}
-	if v >= 3 {
-		Log(show(respLog, "< ", limit))
-	}
-	return resp, nil
-}
 func Log(format string, v ...any) {
 	_, _ = fmt.Fprintf(os.Stderr, format+"\n", v...)
 }

@@ -3,12 +3,10 @@ package requests
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,7 +32,7 @@ func Test_ProxyGet(t *testing.T) {
 		Cookie(http.Cookie{Name: "username", Value: "golang"}),
 		BasicAuth("user", "123456"),
 		Timeout(3*time.Second),
-		Hosts(map[string][]string{"127.0.0.1:8080": {"192.168.1.1:80"}, "4.org:80": {"httpbin.org:80"}}),
+		//Hosts(map[string][]string{"127.0.0.1:8080": {"192.168.1.1:80"}, "4.org:80": {"httpbin.org:80"}}),
 		//Proxy("http://127.0.0.1:8080"),
 	)
 
@@ -133,28 +131,6 @@ func Test_Race(t *testing.T) {
 	time.Sleep(3 * time.Second)
 }
 
-func Test_MockServer(t *testing.T) {
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(w, r.Body)
-	}))
-	defer s.Close()
-	sess := New() //Hosts(map[string][]string{"qq.com:80": []string{"127.0.0.1"}}))
-	resp, err := sess.DoRequest(context.Background(),
-		URL("http://qq.com:80"), Path("/234"),
-		//Body(map[string]string{"hello": "world"}),
-		Body(strings.NewReader("12345678")),
-		TraceLv(3, 102400),
-		Logf(func(ctx context.Context, stat Stat) {
-			t.Logf("%s\n", stat.String())
-		}),
-	)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	t.Logf("%#v, %v", resp, err)
-}
-
 func Test_Retry(t *testing.T) {
 	var reqCount int32 = 0
 
@@ -182,24 +158,26 @@ func Test_Cannel(t *testing.T) {
 }
 
 func Test_Stream(t *testing.T) {
-	body := `{}`
+	body := `{"Namespace":"v_mix_vm", "ResultColumn":["UUID", "AccountName"], "Limit": 10000}`
 	s := New(URL("http://127.0.0.1:80/stream"), Body(body))
-	resp, err := s.DoRequest(context.Background(), Method("POST"), Header("Content-Type", "application/json"), Stream(func(_ int64, b []byte) error {
-		//fmt.Print(string(b))
-		return nil
-	}), TraceLv(3))
+	resp, err := s.DoRequest(context.Background(), MethodPost,
+		Header("Content-Type", "application/json"),
+		Stream(func(_ int64, b []byte) error {
+			//fmt.Print(string(b))
+			return nil
+		}), TraceLv(3))
 	t.Logf("%v, err=%v", resp.Stat(), err)
 
 }
 
 func Test_ForEach(t *testing.T) {
 	s := New(RequestEach(func(ctx context.Context, req *http.Request) error {
-		if req.Header.Get("RequestId") == "" {
-			requestId, ok := ctx.Value("RequestId").(string)
+		if req.Header.Get(RequestId) == "" {
+			requestId, ok := ctx.Value(RequestId).(string)
 			if !ok {
 				requestId = "mytest"
 			}
-			req.Header.Set("Request-Id", requestId)
+			req.Header.Set(RequestId, requestId)
 		}
 
 		return nil

@@ -78,6 +78,7 @@ func (resp *Response) Stat() Stat {
 	}
 
 	if resp.Request != nil {
+		stat.RequestId = resp.Request.Header.Get(RequestId)
 		stat.Request.Method = resp.Request.Method
 		stat.Request.URL = resp.Request.URL.String()
 		if resp.Request.GetBody != nil {
