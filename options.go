@@ -5,34 +5,33 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 )
 
 // Options request
 type Options struct {
-	Method     string
-	URL        string
-	Path       []string
-	Params     map[string]any
-	body       any
-	Header     http.Header
-	Cookies    []http.Cookie
-	Timeout    time.Duration
-	MaxConns   int
-	TraceLv    int
-	TraceLimit int
-	Verify     bool
-	Logf       func(ctx context.Context, stat Stat)
-	Stream     func(int64, []byte) error
+	Method        string
+	URL           string
+	Path          []string
+	Params        map[string]any
+	body          any
+	Header        http.Header
+	Cookies       []http.Cookie
+	Timeout       time.Duration
+	MaxConns      int
+	TraceLv       int
+	mLimit        int
+	Verify        bool
+	Stream        func(int64, []byte) error
+	Transport     HttpRoundTripFunc
+	RoundTripFunc []func(HttpRoundTripFunc) HttpRoundTripFunc
 
-	RequestEach  []func(context.Context, *http.Request) error
-	ResponseEach []func(context.Context, *http.Response) error
+	OnRequest  []func(context.Context, *http.Request) error
+	OnResponse []func(context.Context, *http.Response) error
 
 	// session used
 	LocalAddr net.Addr
@@ -44,28 +43,24 @@ type Options struct {
 type Option func(*Options)
 
 // NewOptions new request
-func newOptions(opts ...Option) Options {
+func newOptions(opts []Option, extends ...Option) Options {
 	opt := Options{
-		Method:     "GET",
-		Params:     make(map[string]any),
-		Header:     make(http.Header),
-		Timeout:    30 * time.Second,
-		MaxConns:   100,
-		Hosts:      make(map[string][]string),
-		Proxy:      http.ProxyFromEnvironment,
-		TraceLimit: 1024,
+		Method:   "GET",
+		Params:   make(map[string]any),
+		Header:   make(http.Header),
+		Timeout:  30 * time.Second,
+		MaxConns: 100,
+		Hosts:    make(map[string][]string),
+		Proxy:    http.ProxyFromEnvironment,
+		mLimit:   1024,
 	}
 	for _, o := range opts {
 		o(&opt)
 	}
+	for _, o := range extends {
+		o(&opt)
+	}
 	return opt
-}
-
-func withOptions(opt1s, opt2s []Option) Options {
-	opts := make([]Option, 0, len(opt1s)+len(opt2s))
-	opts = append(opts, opt1s...)
-	opts = append(opts, opt2s...)
-	return newOptions(opts...)
 }
 
 // Method http method
@@ -198,26 +193,10 @@ func Timeout(timeout time.Duration) Option {
 	}
 }
 
-// TraceLv Trace
-func TraceLv(v int, limit ...int) Option {
-	return func(o *Options) {
-		o.TraceLv = v
-		if len(limit) != 0 {
-			o.TraceLimit = limit[0]
-		}
-	}
-}
-
 // Verify verify
 func Verify(verify bool) Option {
 	return func(o *Options) {
 		o.Verify = verify
-	}
-}
-
-func Logf(f func(context.Context, Stat)) Option {
-	return func(o *Options) {
-		o.Logf = f
 	}
 }
 
@@ -235,13 +214,13 @@ func Stream(stream func(int64, []byte) error) Option {
 
 func RequestEach(each ...func(context.Context, *http.Request) error) Option {
 	return func(o *Options) {
-		o.RequestEach = each
+		o.OnRequest = each
 	}
 }
 
 func ResponseEach(each ...func(context.Context, *http.Response) error) Option {
 	return func(o *Options) {
-		o.ResponseEach = each
+		o.OnResponse = each
 	}
 }
 
@@ -267,11 +246,23 @@ func Proxy(addr string) Option {
 	}
 }
 
-func LogS(ctx context.Context, stat Stat) {
-	fmt.Fprintf(os.Stdout, "%s\n", stat)
+func Setup(httpFn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
+	return func(o *Options) {
+		for _, fn := range httpFn {
+			o.RoundTripFunc = append(o.RoundTripFunc, fn)
+		}
+	}
 }
 
-func StreamS(i int64, raw []byte) error {
-	_, err := fmt.Fprintf(os.Stdout, "i=%d, raw=%s", i, raw)
-	return err
+func Logf(f func(ctx context.Context, stat *Stat)) Option {
+	return func(o *Options) {
+		o.RoundTripFunc = append(o.RoundTripFunc, fprintf(f))
+	}
+}
+
+// TraceLv Trace
+func TraceLv(v int, max ...int) Option {
+	return func(o *Options) {
+		o.RoundTripFunc = append(o.RoundTripFunc, verbose(v, max...))
+	}
 }

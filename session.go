@@ -1,9 +1,11 @@
 package requests
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -14,15 +16,13 @@ import (
 // for efficiency should only be created once and re-used.
 // so, session is also safe for concurrent use by multiple goroutines.
 type Session struct {
-	opts []Option
-	*http.Transport
-	*http.Client
+	opts   []Option
+	client *http.Client
 }
 
 // New session
 func New(opts ...Option) *Session {
-
-	options := newOptions(opts...)
+	options := newOptions(opts)
 
 	transport := &http.Transport{
 		Proxy: options.Proxy,
@@ -62,9 +62,8 @@ func New(opts ...Option) *Session {
 	}
 
 	s := &Session{
-		opts:      opts,
-		Transport: transport,
-		Client: &http.Client{
+		opts: opts,
+		client: &http.Client{
 			Timeout:   options.Timeout,
 			Transport: transport,
 		},
@@ -72,83 +71,49 @@ func New(opts ...Option) *Session {
 	return s
 }
 
-//func (s *Session) Proxy(addr string, auth *proxy.Auth) error {
-//	proxyURL, err := url.Parse(addr)
-//	if err != nil {
-//		return err
-//	}
-//	switch proxyURL.Scheme {
-//	case "http", "https":
-//		s.Transport.Proxy = http.ProxyURL(proxyURL)
-//	case "socks5", "socks4":
-//		s.Transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-//			dialer, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, proxy.Direct)
-//			if err != nil {
-//				return nil, err
-//			}
-//			return dialer.Dial(network, addr)
-//		}
-//	default:
-//		return fmt.Errorf("proxy scheme[%s] invalid", proxyURL.Scheme)
-//	}
-//	return nil
-//}
-
-func (s *Session) RoundTrip(opts ...Option) http.RoundTripper {
-	return &Transport{client: s.Client, options: withOptions(s.opts, opts)}
-}
-
-// DoRequest send a request and return a response
+// DoRequest send a request and return a response, and is safely close `resp.Body`.
 func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, error) {
-	tr := &Transport{client: s.Client, options: withOptions(s.opts, opts)}
-	req, err := NewRequestWithContext(ctx, tr.options)
-	if err != nil {
-		return nil, fmt.Errorf("newRequest: %w", err)
+	options, resp := newOptions(s.opts, opts...), newResponse()
+	resp.Request, resp.Err = NewRequestWithContext(ctx, options)
+	if resp.Err != nil {
+		return nil, fmt.Errorf("newRequest: %w", resp.Err)
 	}
-	return tr.request(req)
+	resp.Response, resp.Err = s.RoundTripper(opts...)(resp.Request)
+	if resp.Err != nil {
+		return resp, resp.Err
+	}
+	//if resp.Response == nil || resp.Response.Body == nil {
+	//	return resp, resp.Err
+	//}
+
+	defer resp.Response.Body.Close()
+
+	if options.Stream != nil {
+		resp.Response.ContentLength, resp.Err = streamRead(resp.Response.Body, options.Stream)
+		resp.Content = bytes.NewBufferString("[consumed]")
+	} else {
+		resp.Response.ContentLength, resp.Err = resp.Content.ReadFrom(resp.Response.Body)
+		resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
+	}
+
+	return resp, resp.Err
 }
 
-// Upload upload file
-//func (s *Session) Upload(url, file string) (*Response, error) {
-//	f, err := os.Open(file)
-//	if err != nil {
-//		return nil, err
-//	}
-//	defer f.Close()
-//	return s.Post(url, "binary/octet-stream", f)
-//}
+// RoundTrip implements the [RoundTripper] interface.
+// Like the `http.RoundTripper` interface, the error types returned by RoundTrip are unspecified.
+func (s *Session) RoundTrip(req *http.Request) (*http.Response, error) {
+	return s.RoundTripper()(req)
+}
 
-// Uploadmultipart upload with multipart form
-//func (s *Session) Uploadmultipart(url, file string, fields map[string]string) (*Response, error) {
-//	f, err := os.Open(file)
-//	if err != nil {
-//		return nil, err
-//	}
-//	defer func(f *os.File) {
-//		_ = f.Close()
-//	}(f)
-//
-//	body := &bytes.Buffer{}
-//	writer := multipart.NewWriter(body)
-//	fw, err := writer.CreateFormFile("file", fields["filename"])
-//	if err != nil {
-//		return nil, fmt.Errorf("CreateFormFile %v", err)
-//	}
-//
-//	_, err = io.Copy(fw, f)
-//	if err != nil {
-//		return nil, fmt.Errorf("copying fileWriter %v", err)
-//	}
-//	for k, v := range fields {
-//		if err = writer.WriteField(k, v); err != nil {
-//			return nil, err
-//		}
-//	}
-//
-//	err = writer.Close() // close writer before POST request
-//	if err != nil {
-//		return nil, fmt.Errorf("writerClose: %v", err)
-//	}
-//
-//	return s.Post(url, writer.FormDataContentType(), body)
-//}
+// RoundTripper return HttpRoundTripFunc.
+func (s *Session) RoundTripper(opts ...Option) HttpRoundTripFunc {
+	options := newOptions(s.opts, opts...)
+	if options.Transport == nil {
+		options.Transport = s.client.Do
+	}
+	fn := each(options)(options.Transport)
+	for _, w := range options.RoundTripFunc {
+		fn = w(fn)
+	}
+	return fn
+}

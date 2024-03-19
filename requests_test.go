@@ -36,7 +36,12 @@ func Test_ProxyGet(t *testing.T) {
 		//Proxy("http://127.0.0.1:8080"),
 	)
 
-	resp, err := sess.DoRequest(context.Background(), Method("GET"), URL("http://httpbin.org"), TraceLv(9))
+	resp, err := sess.DoRequest(
+		context.Background(),
+		Method("GET"),
+		URL("http://httpbin.org"),
+		TraceLv(9),
+	)
 	if err != nil {
 		t.Errorf("%s", err.Error())
 		return
@@ -48,7 +53,7 @@ func Test_ProxyGet(t *testing.T) {
 func Test_PostBody(t *testing.T) {
 	sess := New(
 		BasicAuth("user", "123456"),
-		Logf(func(context.Context, Stat) {
+		Logf(func(context.Context, *Stat) {
 			fmt.Println("session")
 
 		}),
@@ -103,19 +108,6 @@ func Test_FormPost(t *testing.T) {
 	}
 	t.Log(resp.StatusCode, err, resp.Response.ContentLength, resp.Request.ContentLength)
 
-}
-
-func Test_PostForm2(t *testing.T) {
-	res, err := http.PostForm("http://httpbin.org/post", url.Values{
-		"key":   {"this is url key"},
-		"value": {"this is url value"},
-	})
-	// if err != nil {
-	// 	t.Error(err)
-	// 	return
-	// }
-	resp := Response{StartAt: time.Now(), Response: res, Err: err}
-	t.Log("$$$$$$4", resp.Stat())
 }
 
 func Test_Race(t *testing.T) {

@@ -33,15 +33,9 @@ func Test_Id(t *testing.T) {
 
 }
 
-func BenchmarkGenId1(b *testing.B) {
+// go test -v -bench='Benchmark_requests' -benchmem .
+func Benchmark_GenId1(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		GenId()
-	}
-}
-
-// go test -v -bench='BenchmarkGenId' -benchmem .
-func BenchmarkGenId2(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		GenId2()
 	}
 }

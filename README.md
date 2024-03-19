@@ -51,6 +51,8 @@ func main() {
 ```
 
 ## Supported Features & Best–Practices
+* Safe Close `resp.Body`
+* Only depends on standard library
 * Streaming Downloads
 * Chunked HTTP Requests
 * Keep-Alive & Connection Pooling

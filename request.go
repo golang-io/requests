@@ -26,6 +26,8 @@ func makeBody(body any) (io.Reader, error) {
 		return body.(io.Reader), nil
 	case url.Values:
 		return strings.NewReader(v.Encode()), nil
+	case func() (io.ReadCloser, error):
+		return v()
 	default:
 		b, err := json.Marshal(body)
 		if err != nil {
