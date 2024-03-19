@@ -78,10 +78,26 @@ func Test_requests(t *testing.T) {
 		_, _ = io.Copy(w, r.Body)
 	}))
 	defer s.Close()
-	sess := requests.New(requests.URL(s.URL), requests.Timeout(3*time.Second), requests.RequestEach(func(ctx context.Context, req *http.Request) error {
-		req.Header.Set("session-id", "111111")
-		return nil
-	}))
+	sess := requests.New(
+		requests.URL(s.URL),
+		requests.Timeout(3*time.Second),
+		requests.Setup(func(fn requests.HttpRoundTripFunc) requests.HttpRoundTripFunc {
+			return func(req *http.Request) (*http.Response, error) {
+				t.Logf("session Setup")
+				return fn(req)
+			}
+		}),
+		requests.RequestEach(func(ctx context.Context, req *http.Request) error {
+			t.Logf("session RequestEach")
+			req.Header.Set("session-id", "111111")
+			return nil
+		}),
+		requests.ResponseEach(func(ctx context.Context, req *http.Response) error {
+			t.Logf("session ResponseEach")
+			req.Header.Set("session-id", "111111")
+			return nil
+		}),
+	)
 
 	resp, err := sess.DoRequest(context.Background(),
 		requests.Path("/234"),
@@ -89,18 +105,23 @@ func Test_requests(t *testing.T) {
 		requests.TraceLv(3, 102400),
 		requests.RequestEach(func(ctx context.Context, req *http.Request) error {
 			req.Header.Set("12345", "67890")
+			t.Logf("request RequestEach")
 			return nil
 		}),
 		requests.Logf(requests.LogS),
 		requests.Setup(
-
 			func(fn requests.HttpRoundTripFunc) requests.HttpRoundTripFunc {
 				return func(req *http.Request) (*http.Response, error) {
-					fmt.Println("!@#$%^%^&")
+					t.Logf("request Setup")
 					return fn(req)
 				}
 			},
 		),
+		requests.ResponseEach(func(ctx context.Context, req *http.Response) error {
+			t.Logf("request ResponseEach")
+			req.Header.Set("session-id", "111111")
+			return nil
+		}),
 	)
 	if err != nil {
 		t.Error(err)

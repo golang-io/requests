@@ -106,14 +106,16 @@ func (s *Session) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // RoundTripper return HttpRoundTripFunc.
+// RequestEach: session.RequestEach -> request.RequestEach
+// Setup: session.Setup -> request.Setup
+// ResponseEach: session.ResponseEach -> request.ResponseEach
 func (s *Session) RoundTripper(opts ...Option) HttpRoundTripFunc {
 	options := newOptions(s.opts, opts...)
 	if options.Transport == nil {
 		options.Transport = s.client.Do
 	}
-	fn := each(options)(options.Transport)
-	for _, w := range options.RoundTripFunc {
-		fn = w(fn)
+	for i := len(options.RoundTripFunc) - 1; i >= 0; i-- { // setup reverse
+		options.Transport = options.RoundTripFunc[i](options.Transport)
 	}
-	return fn
+	return each(options)(options.Transport)
 }

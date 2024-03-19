@@ -37,13 +37,12 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 	}
 	return func(fn HttpRoundTripFunc) HttpRoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
-			req2 := req.WithContext(req.Context())
-			reqLog, err := DumpRequest(req2)
+			reqLog, err := DumpRequest(req)
 			if err != nil {
 				Log("request error: %w", err)
 				return nil, err
 			}
-			resp, err := fn(req2)
+			resp, err := fn(req)
 			if v >= 2 {
 				Log(show(reqLog, "> ", max))
 			}
