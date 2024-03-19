@@ -214,13 +214,13 @@ func Stream(stream func(int64, []byte) error) Option {
 
 func RequestEach(each ...func(context.Context, *http.Request) error) Option {
 	return func(o *Options) {
-		o.OnRequest = each
+		o.OnRequest = append(o.OnRequest, each...)
 	}
 }
 
 func ResponseEach(each ...func(context.Context, *http.Response) error) Option {
 	return func(o *Options) {
-		o.OnResponse = each
+		o.OnResponse = append(o.OnResponse, each...)
 	}
 }
 

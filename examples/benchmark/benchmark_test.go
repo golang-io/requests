@@ -78,7 +78,10 @@ func Test_requests(t *testing.T) {
 		_, _ = io.Copy(w, r.Body)
 	}))
 	defer s.Close()
-	sess := requests.New(requests.URL(s.URL), requests.Timeout(3*time.Second))
+	sess := requests.New(requests.URL(s.URL), requests.Timeout(3*time.Second), requests.RequestEach(func(ctx context.Context, req *http.Request) error {
+		req.Header.Set("session-id", "111111")
+		return nil
+	}))
 
 	resp, err := sess.DoRequest(context.Background(),
 		requests.Path("/234"),
