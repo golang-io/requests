@@ -43,19 +43,21 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 				return nil, err
 			}
 			resp, err := fn(req)
+			fmt.Println("ContentLength", resp.ContentLength)
 			if v >= 2 {
-				Log(show(reqLog, "> ", max))
+				Log(show("> ", reqLog, max))
 			}
 			if err != nil {
 				return nil, err
 			}
-			respLog, err := httputil.DumpResponse(resp, true)
+			respLog, err := httputil.DumpResponse(resp, false)
 			if err != nil {
 				return nil, err
 			}
 			if v >= 3 {
-				Log(show(respLog, "< ", max))
+				Log(show("< ", respLog, max))
 			}
+			Log(show("[*]", []byte("resp.body is skipped"), max))
 			return resp, nil
 		}
 	}

@@ -27,7 +27,7 @@ func DumpRequestIndent(req *http.Request) string {
 	return b.String()
 }
 
-func show(b []byte, prompt string, maxTruncateBytes int) string {
+func show(prompt string, b []byte, maxTruncateBytes int) string {
 	var buf bytes.Buffer
 	for _, line := range bytes.Split(b, []byte("\n")) {
 		buf.Write([]byte(prompt))

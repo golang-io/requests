@@ -150,14 +150,18 @@ func Test_Cannel(t *testing.T) {
 }
 
 func Test_Stream(t *testing.T) {
-	body := `{"Namespace":"v_mix_vm", "ResultColumn":["UUID", "AccountName"], "Limit": 10000}`
-	s := New(URL("http://127.0.0.1:80/stream"), Body(body))
+	body := `{"Namespace":"v_mix_vm", "ResultColumn":["UUID", "AccountName"], "Limit": 100}`
+	s := New(URL("http://cache-api.polaris:80/stream"), Body(body))
 	resp, err := s.DoRequest(context.Background(), MethodPost,
 		Header("Content-Type", "application/json"),
+		TraceLv(3),
+		Logf(func(ctx context.Context, stat *Stat) {
+			fmt.Println(stat)
+		}),
 		Stream(func(_ int64, b []byte) error {
-			//fmt.Print(string(b))
+			fmt.Print(string(b))
 			return nil
-		}), TraceLv(3))
+		}))
 	t.Logf("%v, err=%v", resp.Stat(), err)
 
 }
