@@ -23,7 +23,7 @@ func fprintf(f func(ctx context.Context, stat *Stat)) func(HttpRoundTripFunc) Ht
 		return func(req *http.Request) (*http.Response, error) {
 			resp.Request = req
 			defer func() {
-				f(context.Background(), StatLoad(resp))
+				f(req.Context(), StatLoad(resp))
 			}()
 			resp.Response, resp.Err = fn(req)
 			return resp.Response, resp.Err
@@ -32,9 +32,9 @@ func fprintf(f func(ctx context.Context, stat *Stat)) func(HttpRoundTripFunc) Ht
 }
 
 func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc {
-	max := 10240
+	maxLimit := 10240
 	if len(mLimit) != 0 {
-		max = mLimit[0]
+		maxLimit = mLimit[0]
 	}
 	return func(fn HttpRoundTripFunc) HttpRoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
@@ -47,7 +47,7 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 			}
 			resp, err := fn(req)
 			if v >= 2 {
-				Log(show("> ", reqLog, max))
+				Log(show("> ", reqLog, maxLimit))
 			}
 			if err != nil {
 				return nil, err
@@ -58,7 +58,7 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 				return nil, err
 			}
 			if v > 3 {
-				Log(show("< ", respLog, max))
+				Log(show("< ", respLog, maxLimit))
 			} else {
 				Log("* resp.body is skipped")
 			}
