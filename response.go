@@ -23,10 +23,12 @@ func newResponse() *Response {
 	return &Response{StartAt: time.Now(), Content: &bytes.Buffer{}}
 }
 
+// String implement fmt.Stringer interface.
 func (resp *Response) String() string {
 	return resp.Content.String()
 }
 
+// Error implement error interface.
 func (resp *Response) Error() string {
 	if resp.Err == nil {
 		return ""
@@ -40,7 +42,7 @@ func (resp *Response) Text() string {
 }
 
 // Download parse response to a file
-func (resp *Response) Download(name string) (int, error) {
+func (resp *Response) Download(name string) (int64, error) {
 	f, err := os.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return 0, err
@@ -48,9 +50,10 @@ func (resp *Response) Download(name string) (int, error) {
 	defer func(f *os.File) {
 		_ = f.Close()
 	}(f)
-	return f.Write(resp.Content.Bytes())
+	return io.Copy(f, resp.Content)
 }
 
+// Stat stat
 func (resp *Response) Stat() *Stat {
 	return StatLoad(resp)
 }

@@ -188,7 +188,7 @@ func Test_ForEach(t *testing.T) {
 
 		return nil
 	}))
-	resp, err := s.DoRequest(context.Background(), URL("http://httpbin.org/get"), TraceLv(3, 10024))
+	resp, err := s.DoRequest(context.Background(), URL("http://httpbin.org/get"), TraceLv(4, 10024))
 	t.Logf("%v, %v", resp.Stat(), err)
 
 }

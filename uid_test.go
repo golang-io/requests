@@ -24,7 +24,7 @@ func Test_Id(t *testing.T) {
 		return
 	}
 	maxLength := 9 * v
-	t.Logf("相同长度的时间戳最大的数字: %d, 时间戳对应时间=%s", maxLength, time.UnixMicro(maxLength))
+	t.Logf("%d, 时间戳对应时间=%s", maxLength, time.UnixMicro(maxLength))
 
 	random := uFormat("ZZZ")
 	t.Logf("random=%d", random)
@@ -33,8 +33,8 @@ func Test_Id(t *testing.T) {
 
 }
 
-// go test -v -bench='Benchmark_requests' -benchmem .
-func Benchmark_GenId1(b *testing.B) {
+// go test -v -bench='Benchmark_GenId' -benchmem .
+func Benchmark_GenId(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		GenId()
 	}

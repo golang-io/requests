@@ -71,34 +71,6 @@ func New(opts ...Option) *Session {
 	return s
 }
 
-// DoRequest send a request and return a response, and is safely close `resp.Body`.
-func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, error) {
-	options, resp := newOptions(s.opts, opts...), newResponse()
-	resp.Request, resp.Err = NewRequestWithContext(ctx, options)
-	if resp.Err != nil {
-		return nil, fmt.Errorf("newRequest: %w", resp.Err)
-	}
-	resp.Response, resp.Err = s.RoundTripper(opts...)(resp.Request)
-	if resp.Err != nil {
-		return resp, resp.Err
-	}
-	//if resp.Response == nil || resp.Response.Body == nil {
-	//	return resp, resp.Err
-	//}
-
-	defer resp.Response.Body.Close()
-
-	if options.Stream != nil {
-		resp.Response.ContentLength, resp.Err = streamRead(resp.Response.Body, options.Stream)
-		resp.Content = bytes.NewBufferString("[consumed]")
-	} else {
-		resp.Response.ContentLength, resp.Err = resp.Content.ReadFrom(resp.Response.Body)
-		resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
-	}
-
-	return resp, resp.Err
-}
-
 // RoundTrip implements the [RoundTripper] interface.
 // Like the `http.RoundTripper` interface, the error types returned by RoundTrip are unspecified.
 func (s *Session) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -118,4 +90,43 @@ func (s *Session) RoundTripper(opts ...Option) HttpRoundTripFunc {
 		options.Transport = options.RoundTripFunc[i](options.Transport)
 	}
 	return each(options)(options.Transport)
+}
+
+// Do send a request and  return `http.Response`. DO NOT forget close `resp.Body`.
+func (s *Session) Do(ctx context.Context, opts ...Option) (*http.Response, error) {
+	options := newOptions(s.opts, opts...)
+	req, err := NewRequestWithContext(ctx, options)
+	if err != nil {
+		return nil, fmt.Errorf("newRequest: %w", err)
+	}
+	return s.RoundTripper(opts...)(req)
+}
+
+// DoRequest send a request and return a response, and is safely close `resp.Body`.
+func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, error) {
+	options, resp := newOptions(s.opts, opts...), newResponse()
+	resp.Request, resp.Err = NewRequestWithContext(ctx, options)
+	if resp.Err != nil {
+		return nil, fmt.Errorf("newRequest: %w", resp.Err)
+	}
+	resp.Response, resp.Err = s.RoundTripper(opts...)(resp.Request)
+	if resp.Err != nil {
+		return resp, resp.Err
+	}
+
+	if resp.Response == nil || resp.Response.Body == nil {
+		return resp, resp.Err
+	}
+
+	defer resp.Response.Body.Close()
+
+	if options.Stream != nil {
+		resp.Response.ContentLength, resp.Err = streamRead(resp.Response.Body, options.Stream)
+		resp.Content = bytes.NewBufferString("[consumed]")
+	} else {
+		resp.Response.ContentLength, resp.Err = resp.Content.ReadFrom(resp.Response.Body)
+		resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
+	}
+
+	return resp, resp.Err
 }

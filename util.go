@@ -6,26 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"os"
 )
-
-// DumpRequest returns the given request in its HTTP/1.x wire representation.
-func DumpRequest(req *http.Request) ([]byte, error) {
-	return httputil.DumpRequestOut(req, true)
-}
-
-// DumpRequestIndent warp Dump
-func DumpRequestIndent(req *http.Request) string {
-	dump, _ := DumpRequest(req)
-	var b bytes.Buffer
-	for _, line := range bytes.Split(dump, []byte("\n")) {
-		b.Write([]byte("> "))
-		b.Write(line)
-		b.WriteString("\n")
-	}
-	return b.String()
-}
 
 func show(prompt string, b []byte, maxTruncateBytes int) string {
 	var buf bytes.Buffer
@@ -61,10 +43,12 @@ func drainBody(b io.ReadCloser) (r1, r2 io.ReadCloser, err error) {
 	return io.NopCloser(&buf), io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
-func LogS(ctx context.Context, stat *Stat) {
+// LogS supply default handle Stat, print to stdout.
+func LogS(_ context.Context, stat *Stat) {
 	_, _ = fmt.Fprintf(os.Stdout, "%s\n", stat)
 }
 
+// StreamS supply default handle Stream, print raw msg in stream to stdout.
 func StreamS(i int64, raw []byte) error {
 	_, err := fmt.Fprintf(os.Stdout, "i=%d, raw=%s", i, raw)
 	return err

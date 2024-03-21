@@ -224,6 +224,20 @@ func ResponseEach(each ...func(context.Context, *http.Response) error) Option {
 	}
 }
 
+// Host set net/http.Request.Host.
+// 在客户端，请求的Host字段（可选地）用来重写请求的Host头。 如过该字段为""，Request.Write方法会使用URL字段的Host。
+func Host(host string) Option {
+	return func(o *Options) {
+		o.RoundTripFunc = append(o.RoundTripFunc, func(fn HttpRoundTripFunc) HttpRoundTripFunc {
+			return func(req *http.Request) (*http.Response, error) {
+				req.Host = host
+				req.Header.Set("Host", host)
+				return fn.RoundTrip(req)
+			}
+		})
+	}
+}
+
 // Hosts 自定义Host配置，参数只能在session级别生效，格式：<host:port>
 // 如果存在proxy服务，只能解析代理服务，不能解析url地址
 func Hosts(hosts map[string][]string) Option {

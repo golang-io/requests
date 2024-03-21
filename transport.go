@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"net/http/httputil"
 )
 
@@ -37,27 +38,31 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 	}
 	return func(fn HttpRoundTripFunc) HttpRoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
-			reqLog, err := DumpRequest(req)
+			ctx := httptrace.WithClientTrace(req.Context(), trace)
+			req2 := req.WithContext(ctx)
+			reqLog, err := httputil.DumpRequestOut(req2, true)
 			if err != nil {
-				Log("request error: %w", err)
+				Log("! request error: %w", err)
 				return nil, err
 			}
 			resp, err := fn(req)
-			fmt.Println("ContentLength", resp.ContentLength)
 			if v >= 2 {
 				Log(show("> ", reqLog, max))
 			}
 			if err != nil {
 				return nil, err
 			}
-			respLog, err := httputil.DumpResponse(resp, false)
+
+			respLog, err := httputil.DumpResponse(resp, v > 3)
 			if err != nil {
 				return nil, err
 			}
-			if v >= 3 {
+			if v > 3 {
 				Log(show("< ", respLog, max))
+			} else {
+				Log("* resp.body is skipped")
 			}
-			Log(show("[*]", []byte("resp.body is skipped"), max))
+			Log("* ")
 			return resp, nil
 		}
 	}

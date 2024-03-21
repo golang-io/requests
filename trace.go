@@ -118,6 +118,7 @@ var trace = &httptrace.ClientTrace{
 	},
 }
 
+// Log print
 func Log(format string, v ...any) {
 	_, _ = fmt.Fprintf(os.Stderr, format+"\n", v...)
 }

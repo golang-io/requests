@@ -25,10 +25,10 @@ type Stat struct {
 		StatusCode    int               `json:"StatusCode"`
 		ContentLength int64             `json:"ContentLength"`
 	} `json:"Response"`
-	Err   string `json:"Err"`
-	Retry int    `json:"Retry"`
+	Err string `json:"Err"`
 }
 
+// String implement fmt.Stringer interface.
 func (stat *Stat) String() string {
 	b, _ := json.Marshal(stat)
 	return string(b)
@@ -36,6 +36,7 @@ func (stat *Stat) String() string {
 
 const dateTime = "2006-01-02 15:04:05.000"
 
+// StatLoad stat.
 func StatLoad(resp *Response) *Stat {
 	stat := &Stat{
 		StartAt: resp.StartAt.Format(dateTime),

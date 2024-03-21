@@ -9,6 +9,7 @@ import (
 
 var source = rand.New(rand.NewSource(time.Now().Unix()))
 
+// GenId gen random id.
 func GenId(id ...string) string {
 	if len(id) != 0 && id[0] != "" {
 		return id[0]
