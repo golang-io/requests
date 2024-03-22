@@ -44,7 +44,8 @@ func StatLoad(resp *Response) *Stat {
 	}
 	if resp.Response != nil {
 		var err error
-		if resp.Content.Len() == 0 {
+		if resp.Content == nil || resp.Response.ContentLength != 0 {
+			resp.Content = &bytes.Buffer{}
 			if resp.Response.ContentLength, err = resp.Content.ReadFrom(resp.Response.Body); err == nil {
 				defer resp.Response.Body.Close()
 				resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))

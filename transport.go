@@ -1,8 +1,10 @@
 package requests
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptrace"
 	"net/http/httputil"
@@ -32,12 +34,15 @@ func fprintf(f func(ctx context.Context, stat *Stat)) func(HttpRoundTripFunc) Ht
 }
 
 func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc {
-	maxLimit := 10240
-	if len(mLimit) != 0 {
-		maxLimit = mLimit[0]
-	}
 	return func(fn HttpRoundTripFunc) HttpRoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
+			if v == 0 {
+				return fn(req) // fast path
+			}
+			maxLimit := 10240
+			if len(mLimit) != 0 {
+				maxLimit = mLimit[0]
+			}
 			ctx := httptrace.WithClientTrace(req.Context(), trace)
 			req2 := req.WithContext(ctx)
 			reqLog, err := httputil.DumpRequestOut(req2, true)
@@ -45,7 +50,7 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 				Log("! request error: %w", err)
 				return nil, err
 			}
-			resp, err := fn(req)
+			resp, err := fn(req2)
 			if v >= 2 {
 				Log(show("> ", reqLog, maxLimit))
 			}
@@ -83,6 +88,26 @@ func each(options Options) func(HttpRoundTripFunc) HttpRoundTripFunc {
 			for _, each := range options.OnResponse {
 				if err := each(req.Context(), resp); err != nil {
 					return resp, fmt.Errorf("responseEach: %w", err)
+				}
+			}
+			return resp, err
+		}
+	}
+}
+
+func Retry(maxLimit int, check func(*http.Request, *http.Response, error) error) func(HttpRoundTripFunc) HttpRoundTripFunc {
+	return func(fn HttpRoundTripFunc) HttpRoundTripFunc {
+		return func(req *http.Request) (*http.Response, error) {
+			var buf bytes.Buffer
+			_, _ = buf.ReadFrom(req.Body)
+			var resp *http.Response
+			var err error
+			for i := 0; i < maxLimit; i++ {
+				req2 := req.WithContext(req.Context())
+				req2.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+				resp, err = fn(req2)
+				if err = check(req2, resp, err); err == nil {
+					return resp, err
 				}
 			}
 			return resp, err

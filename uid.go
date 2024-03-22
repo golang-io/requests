@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var source = rand.New(rand.NewSource(time.Now().Unix()))
+var source = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // GenId gen random id.
 func GenId(id ...string) string {

@@ -20,7 +20,7 @@ type Response struct {
 }
 
 func newResponse() *Response {
-	return &Response{StartAt: time.Now(), Content: &bytes.Buffer{}}
+	return &Response{StartAt: time.Now(), Response: &http.Response{}, Content: &bytes.Buffer{}}
 }
 
 // String implement fmt.Stringer interface.

@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-//func Test_Download(t *testing.T) {
-//	t.Log("Testing Download")
-//	err := DownloadFile("https://github.com/prometheus/prometheus/releases/download/v2.12.0/prometheus-2.12.0.linux-amd64.tar.gz", true)
-//	t.Log(err)
-//}
-
 func Test_Basic(t *testing.T) {
 	resp, err := Get("http://127.0.0.1:12345/get")
 	t.Logf("%#v, %v", resp, err)

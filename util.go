@@ -9,7 +9,7 @@ import (
 	"os"
 )
 
-func show(prompt string, b []byte, maxTruncateBytes int) string {
+func show(prompt string, b []byte, mLimit int) string {
 	var buf bytes.Buffer
 	for _, line := range bytes.Split(b, []byte("\n")) {
 		buf.Write([]byte(prompt))
@@ -17,8 +17,8 @@ func show(prompt string, b []byte, maxTruncateBytes int) string {
 		buf.WriteString("\n")
 	}
 	str := buf.String()
-	if len(str) > maxTruncateBytes {
-		return fmt.Sprintf("%s...[Len=%d, Truncated[%d]]", str[:maxTruncateBytes], len(str), maxTruncateBytes)
+	if len(str) > mLimit {
+		return fmt.Sprintf("%s...[Len=%d, Truncated[%d]]", str[:mLimit], len(str), mLimit)
 	}
 	return str
 }
@@ -52,4 +52,8 @@ func LogS(_ context.Context, stat *Stat) {
 func StreamS(i int64, raw []byte) error {
 	_, err := fmt.Fprintf(os.Stdout, "i=%d, raw=%s", i, raw)
 	return err
+}
+
+func RetryHandle(req *http.Request, resp *http.Response, err error) error {
+	return fmt.Errorf("retry")
 }
