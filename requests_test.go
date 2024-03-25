@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -185,4 +186,30 @@ func Test_ForEach(t *testing.T) {
 	resp, err := s.DoRequest(context.Background(), URL("http://httpbin.org/get"), TraceLv(4, 10024))
 	t.Logf("%v, %v", resp.Stat(), err)
 
+}
+
+func TestResponse_Download(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		text := "abc\ndef\nghij\n\n123"
+		fmt.Fprint(w, text)
+	}))
+	defer s.Close()
+
+	u := "https://go.dev/dl/go1.22.1.darwin-amd64.tar.gz" // a35015fca6f631f3501a36b3bccba9c5
+	sess := New(URL(u))
+	f, err := os.OpenFile("tmp/xx.tar.gz", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+	defer f.Close()
+	sum := 0
+	resp, err := sess.DoRequest(context.Background(),
+		TraceLv(3),
+		Stream(func(i int64, row []byte) error {
+			cnt, err := f.Write(row)
+			sum += cnt
+			return err
+		}))
+	if err != nil {
+		t.Logf("resp=%d, err=%s", resp.Content, err)
+		return
+	}
+	t.Logf("resp=%d, err=%s", resp.Content, err)
 }

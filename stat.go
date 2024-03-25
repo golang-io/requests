@@ -1,9 +1,8 @@
 package requests
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
+	"fmt"
 )
 
 const RequestId = "Request-Id"
@@ -44,11 +43,10 @@ func StatLoad(resp *Response) *Stat {
 	}
 	if resp.Response != nil {
 		var err error
-		if resp.Content == nil || resp.Response.ContentLength != 0 {
-			resp.Content = &bytes.Buffer{}
-			if resp.Response.ContentLength, err = resp.Content.ReadFrom(resp.Response.Body); err == nil {
-				defer resp.Response.Body.Close()
-				resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
+		if resp.Content == nil || resp.Content.Len() == 0 {
+			if resp.Content, err = CopyResponseBody(resp.Response); err != nil {
+				stat.Err += fmt.Sprintf("read response: %s", err)
+				return stat
 			}
 		}
 		stat.Response.Body = make(map[string]any)
@@ -68,10 +66,17 @@ func StatLoad(resp *Response) *Stat {
 		stat.Request.Method = resp.Request.Method
 		stat.Request.URL = resp.Request.URL.String()
 		if resp.Request.GetBody != nil {
-			body, _ := resp.Request.GetBody()
+			body, err := resp.Request.GetBody()
+			if err != nil {
+				stat.Err += fmt.Sprintf("read request1: %s", err)
+				return stat
+			}
 
-			var buf bytes.Buffer
-			_, _ = buf.ReadFrom(body)
+			buf, _, err := copyBody(body)
+			if err != nil {
+				stat.Err += fmt.Sprintf("read request2: %s", err)
+				return stat
+			}
 
 			m := make(map[string]any)
 

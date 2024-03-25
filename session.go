@@ -123,16 +123,12 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 
 	defer resp.Response.Body.Close()
 
-	var err error
 	if options.Stream != nil {
-		_, err = streamRead(resp.Response.Body, options.Stream)
+		_, resp.Err = streamRead(resp.Response.Body, options.Stream)
 		resp.Content = bytes.NewBufferString("[consumed]")
 	} else {
-		_, err = resp.Content.ReadFrom(resp.Response.Body)
+		_, resp.Err = resp.Content.ReadFrom(resp.Response.Body)
 		resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
-	}
-	if err != nil {
-		resp.Err = fmt.Errorf("err1=%w, err2=%w", resp.Err, err)
 	}
 	return resp, resp.Err
 }

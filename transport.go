@@ -58,16 +58,23 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 				return nil, err
 			}
 
-			respLog, err := httputil.DumpResponse(resp, v > 3)
-			if err != nil {
-				return nil, err
+			if v >= 3 {
+				// 答应响应头和响应体长度
+				Log("< %s %s", resp.Proto, resp.Status)
+				for k, vs := range resp.Header {
+					for _, v := range vs {
+						Log("< %s: %s", k, v)
+					}
+				}
 			}
-			if v > 3 {
-				Log(show("< ", respLog, maxLimit))
-			} else {
-				Log("* resp.body is skipped")
+			if v >= 4 {
+				buf, err := CopyResponseBody(resp)
+				if err != nil {
+					Log("! response error: %w", err)
+					return nil, err
+				}
+				Log(show("*", buf.Bytes(), maxLimit))
 			}
-			Log("* ")
 			return resp, nil
 		}
 	}

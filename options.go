@@ -260,6 +260,7 @@ func Proxy(addr string) Option {
 	}
 }
 
+// Setup use middleware
 func Setup(httpFn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
 	return func(o *Options) {
 		for _, fn := range httpFn {
@@ -268,6 +269,14 @@ func Setup(httpFn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
 	}
 }
 
+// RoundTripFunc set default `*http.Transport` by customer define.
+func RoundTripFunc(fn HttpRoundTripFunc) Option {
+	return func(o *Options) {
+		o.Transport = fn
+	}
+}
+
+// Logf print log
 func Logf(f func(ctx context.Context, stat *Stat)) Option {
 	return func(o *Options) {
 		o.RoundTripFunc = append(o.RoundTripFunc, fprintf(f))
