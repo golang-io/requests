@@ -1,6 +1,6 @@
 # request
 
-**Requests** is a simle, yet elegant, Go HTTP client library for Humans™ ✨🍰✨
+**Requests** is a simle, yet elegant, Go HTTP `client` and `server` library for Humans™ ✨🍰✨
 
 #### API Reference and User Guide available on [Read the Docs](https://pkg.go.dev/github.com/golang-io/requests)
 #### Supported Features & Best–Practices
@@ -191,3 +191,65 @@ Such as `request` params:
 #### Transport and RoundTripper
 
 ### Example
+
+## Server
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/go-chi/chi/middleware"
+	"github.com/golang-io/requests"
+	"io"
+	"net/http"
+)
+
+func main() {
+	s := requests.NewServer(
+		requests.URL("0.0.0.0:1234"),
+		requests.Use(requests.WarpHttpHandler(middleware.Logger)), //
+		//RequestEach(func(ctx context.Context, req *http.Request) error {
+		//	//fmt.Println("request each inject", req.URL.Path)
+		//	//if req.URL.Path == "/12345" {
+		//	//	return errors.New("request each inject")
+		//	//}
+		//	return nil
+		//}),
+		requests.Use(func(fn http.HandlerFunc) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				fn(w, r)
+			}
+
+		}),
+	)
+	s.Path("/echo", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(w, r.Body)
+	})
+	s.Path("/ping", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "pong\n")
+	}, requests.Use(func(f http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			f(w, r)
+		}
+	}))
+	err := s.Run()
+	fmt.Println(err)
+}
+```
+Then, do some requests...
+```shell
+% curl http://127.0.0.1:1234/echo
+% curl http://127.0.0.1:1234/ping
+pong
+
+```
+And, there are some logs from server.
+```shell
+% go run examples/server/example_1/main.go
+2024-03-27 02:47:47 http serve 0.0.0.0:1234
+2024/03/27 02:47:59 "GET http://127.0.0.1:1234/echo HTTP/1.1" from 127.0.0.1:60922 - 000 0B in 9.208µs
+path use {}
+2024/03/27 02:48:06 "GET http://127.0.0.1:1234/ping HTTP/1.1" from 127.0.0.1:60927 - 200 5B in 5.125µs
+
+```
