@@ -73,7 +73,7 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 					Log("! response error: %w", err)
 					return nil, err
 				}
-				Log(show("*", buf.Bytes(), maxLimit))
+				Log(show("", buf.Bytes(), maxLimit))
 			}
 			return resp, nil
 		}
