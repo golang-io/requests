@@ -33,6 +33,9 @@ type Options struct {
 	OnRequest  []func(context.Context, *http.Request) error
 	OnResponse []func(context.Context, *http.Response) error
 
+	// it is only used by server mode
+	HttpHandlerFunc []HttpHandlerFunc
+
 	// session used
 	LocalAddr net.Addr
 	Hosts     map[string][]string // 内部host文件
@@ -261,11 +264,15 @@ func Proxy(addr string) Option {
 }
 
 // Setup use middleware
-func Setup(httpFn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
+func Setup(fn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
 	return func(o *Options) {
-		for _, fn := range httpFn {
-			o.RoundTripFunc = append(o.RoundTripFunc, fn)
-		}
+		o.RoundTripFunc = append(o.RoundTripFunc, fn...)
+	}
+}
+
+func Use(fn ...HttpHandlerFunc) Option {
+	return func(o *Options) {
+		o.HttpHandlerFunc = append(o.HttpHandlerFunc, fn...)
 	}
 }
 
