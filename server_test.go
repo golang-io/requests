@@ -1,6 +1,7 @@
 package requests
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,5 +39,13 @@ func Test_NewServer(t *testing.T) {
 			f(w, r)
 		}
 	}))
-	s.Run()
+
+	go func() {
+		s.Run()
+	}()
+	sess := New(URL("http://127.0.0.1:9099"))
+	sess.DoRequest(context.Background(), Path("/echo"), Body("12345"), Logf(LogS))
+	sess.DoRequest(context.Background(), Path("/ping"), Logf(LogS))
+	sess.DoRequest(context.Background(), Path("/1234"), Logf(LogS))
+
 }

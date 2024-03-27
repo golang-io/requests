@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -31,9 +32,13 @@ func New(opts ...Option) *Session {
 	transport := &http.Transport{
 		Proxy: options.Proxy,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			tmp, ok := options.Hosts[addr]
-			if ok {
-				addr = tmp[0]
+			if strings.HasPrefix(options.URL, "unix://") {
+				u, err := url.Parse(options.URL)
+				if err != nil {
+					return nil, err
+				}
+				// unix:///tmp/requests.sock => u.Scheme=unix, u.Host=, u.Path=/tmp/requests.sock
+				network, addr = u.Scheme, u.Path
 			}
 			dialer := net.Dialer{
 				Timeout:   10 * time.Second, // 限制建立TCP连接的时间

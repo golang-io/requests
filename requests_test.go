@@ -58,7 +58,7 @@ func Test_PostBody(t *testing.T) {
 	//	return
 	//}
 
-	resp, err := sess.DoRequest(context.Background(), Hosts(map[string][]string{"httpbin.org:80": {"aaa.com"}}),
+	resp, err := sess.DoRequest(context.Background(),
 		Method("POST"),
 		URL("http://httpbin.org/post"),
 		Params(map[string]any{

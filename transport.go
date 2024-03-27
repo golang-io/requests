@@ -47,7 +47,7 @@ func verbose(v int, mLimit ...int) func(fn HttpRoundTripFunc) HttpRoundTripFunc 
 			req2 := req.WithContext(ctx)
 			reqLog, err := httputil.DumpRequestOut(req2, true)
 			if err != nil {
-				Log("! request error: %w", err)
+				Log("! request error: %v", err)
 				return nil, err
 			}
 			resp, err := fn(req2)

@@ -1,6 +1,7 @@
 package requests
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -32,7 +33,7 @@ type ServeMux struct {
 	path    string
 	handler http.HandlerFunc
 	opts    []Option
-	next    *ServeMux
+	next    []*ServeMux
 }
 
 // ServeHTTP implement http.Handler interface
@@ -40,10 +41,12 @@ type ServeMux struct {
 // 其次执行RequestEach对`http.Request`进行处理,如果处理失败的话，直接返回400
 // 最后处理中间件`requests.HttpHandlerFunc`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	current := mux
-
-	for current != nil && current.path != r.URL.Path {
-		current = current.next
+	var current *ServeMux
+	for _, m := range mux.next {
+		if m.path == r.URL.Path {
+			current = m
+			break
+		}
 	}
 
 	if current == nil || current.handler == nil {
@@ -66,43 +69,40 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h(w, r)
 }
 
-func (mux *ServeMux) Run(opts ...Option) error {
-	options := newOptions(mux.opts, opts...)
-	srv := &http.Server{
-		Addr:    options.URL,
-		Handler: mux,
-	}
-	Log("%s http serve %s", time.Now().Format("2006-01-02 15:04:05"), options.URL)
-	return srv.ListenAndServe()
+type Server struct {
+	mux *ServeMux
+	srv *http.Server
 }
 
-// Root set "" path handler
-func (mux *ServeMux) Root(h func(w http.ResponseWriter, r *http.Request)) {
-	mux.handler = h
+// NewServer make server to serve.The options are auto handled.
+func NewServer(opts ...Option) *Server {
+	options := newOptions(opts)
+	mux := &ServeMux{opts: opts}
+	return &Server{
+		mux: mux,
+		srv: &http.Server{
+			Addr:    options.URL,
+			Handler: mux,
+		},
+	}
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.srv.Shutdown(ctx)
+}
+
+func (s *Server) Run() error {
+	Log("%s http serve %s", time.Now().Format("2006-01-02 15:04:05"), s.srv.Addr)
+	return s.srv.ListenAndServe()
 }
 
 // Path set pattern to handle
-// the default path is "". it can replace it
-// but the other path cannot override, so if your path not work, maybe it is already exists!
-// you can set some options effective only used in single uri.
-// if you want to use global options, u can set into NewServer.
-func (mux *ServeMux) Path(path string, h func(http.ResponseWriter, *http.Request), opts ...Option) {
-	current := mux
-	for current != nil && current.next != nil {
-		current = current.next
-		break
-	}
-	current.next = &ServeMux{path: path, handler: h, opts: opts}
+// path cannot override, so if your path not work, maybe it is already exists!
+func (s *Server) Path(path string, h func(http.ResponseWriter, *http.Request), opts ...Option) {
+	s.mux.next = append(s.mux.next, &ServeMux{path: path, handler: h, opts: opts})
 }
 
 // Use can set middleware which compatible with net/http.ServeMux.
-func (mux *ServeMux) Use(fn ...HttpHandlerFunc) {
-	mux.opts = append(mux.opts, Use(fn...))
-}
-
-// NewServer make server to serve.
-// the options are auto handled
-func NewServer(opts ...Option) *ServeMux {
-	mux := &ServeMux{opts: opts} // root node
-	return mux
+func (s *Server) Use(fn ...HttpHandlerFunc) {
+	s.mux.opts = append(s.mux.opts, Use(fn...))
 }

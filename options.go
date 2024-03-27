@@ -38,7 +38,6 @@ type Options struct {
 
 	// session used
 	LocalAddr net.Addr
-	Hosts     map[string][]string // 内部host文件
 	Proxy     func(*http.Request) (*url.URL, error)
 }
 
@@ -53,7 +52,6 @@ func newOptions(opts []Option, extends ...Option) Options {
 		Header:   make(http.Header),
 		Timeout:  30 * time.Second,
 		MaxConns: 100,
-		Hosts:    make(map[string][]string),
 		Proxy:    http.ProxyFromEnvironment,
 		mLimit:   1024,
 	}
@@ -86,7 +84,11 @@ func Method(method string) Option {
 	}
 }
 
-// URL set url
+// URL set client to dial connection use http transport or unix socket.
+// IF using socket connection. you must set unix in session, and set http in request. For example,
+// sess := requests.New(requests.URL("unix:///tmp/requests.sock"))
+// sess.DoRequest(context.Background(), requests.URL("http://path?k=v"), requests.Body("12345"))
+// https://old.lubui.com/2021/07/26/golang-socket-file/
 func URL(url string) Option {
 	return func(o *Options) {
 		o.URL = url
@@ -238,14 +240,6 @@ func Host(host string) Option {
 				return fn.RoundTrip(req)
 			}
 		})
-	}
-}
-
-// Hosts 自定义Host配置，参数只能在session级别生效，格式：<host:port>
-// 如果存在proxy服务，只能解析代理服务，不能解析url地址
-func Hosts(hosts map[string][]string) Option {
-	return func(o *Options) {
-		o.Hosts = hosts
 	}
 }
 

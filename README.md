@@ -1,6 +1,10 @@
-# request
+# <center>requests</center>
+<div style="text-align: center;">
+    <div><strong>Requests is a simple, yet elegant, Go HTTP client and server library for Humans™ ✨🍰✨</strong></div>
+    <a href="https://pkg.go.dev/github.com/golang-io/requests"><img src="https://pkg.go.dev/badge/github.com/golang-io/requests.svg" alt="Go Reference"></a>
+    <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
+</div>
 
-**Requests** is a simle, yet elegant, Go HTTP `client` and `server` library for Humans™ ✨🍰✨
 
 #### API Reference and User Guide available on [Read the Docs](https://pkg.go.dev/github.com/golang-io/requests)
 #### Supported Features & Best–Practices
@@ -199,7 +203,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-io/requests"
 	"io"
 	"net/http"
@@ -208,7 +212,9 @@ import (
 func main() {
 	s := requests.NewServer(
 		requests.URL("0.0.0.0:1234"),
-		requests.Use(requests.WarpHttpHandler(middleware.Logger)), //
+		requests.Use(
+			requests.WarpHttpHandler(middleware.Recoverer),
+			requests.WarpHttpHandler(middleware.Logger)), //
 		//RequestEach(func(ctx context.Context, req *http.Request) error {
 		//	//fmt.Println("request each inject", req.URL.Path)
 		//	//if req.URL.Path == "/12345" {
@@ -223,6 +229,9 @@ func main() {
 
 		}),
 	)
+	s.Path("/panic", func(w http.ResponseWriter, r *http.Request) {
+		panic("panic test")
+	})
 	s.Path("/echo", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(w, r.Body)
 	})
