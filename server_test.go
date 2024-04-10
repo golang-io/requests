@@ -18,12 +18,11 @@ func Test_NewServer(t *testing.T) {
 		//	//}
 		//	return nil
 		//}),
-		Use(func(fn http.HandlerFunc) http.HandlerFunc {
+		Use(WarpHttpHandlerFunc(func(fn http.HandlerFunc) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) {
 				fn(w, r)
 			}
-
-		}),
+		})),
 	)
 	//s.Path("", func(w http.ResponseWriter, r *http.Request) {
 	//	fmt.Fprintf(w, "1234!!!")
@@ -33,12 +32,12 @@ func Test_NewServer(t *testing.T) {
 	})
 	s.Route("/ping", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "pong\n")
-	}, Use(func(f http.HandlerFunc) http.HandlerFunc {
+	}, Use(WarpHttpHandlerFunc(func(f http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			fmt.Println("path use", r.Body)
 			f(w, r)
 		}
-	}))
+	})))
 
 	go func() {
 		s.Run(context.Background())

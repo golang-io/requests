@@ -1,6 +1,7 @@
 package requests
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/pprof"
@@ -122,4 +123,12 @@ func (s *Server) Pprof() {
 	s.Route("/debug/pprof/profile", pprof.Profile)
 	s.Route("/debug/pprof/symbol", pprof.Symbol)
 	s.Route("/debug/pprof/trace", pprof.Trace)
+}
+
+// ParseBody parse body from `Request.Body`.
+func ParseBody(r *http.Request) (*bytes.Buffer, error) {
+	var buf bytes.Buffer
+	_, err := buf.ReadFrom(r.Body)
+	return &buf, err
+
 }

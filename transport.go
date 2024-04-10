@@ -102,6 +102,7 @@ func each(options Options) func(HttpRoundTripFunc) HttpRoundTripFunc {
 	}
 }
 
+// Retry handler client.
 func Retry(maxLimit int, check func(*http.Request, *http.Response, error) error) func(HttpRoundTripFunc) HttpRoundTripFunc {
 	return func(fn HttpRoundTripFunc) HttpRoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
