@@ -28,10 +28,10 @@ func Test_NewServer(t *testing.T) {
 	//s.Path("", func(w http.ResponseWriter, r *http.Request) {
 	//	fmt.Fprintf(w, "1234!!!")
 	//})
-	s.Path("/echo", func(w http.ResponseWriter, r *http.Request) {
+	s.Route("/echo", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(w, r.Body)
 	})
-	s.Path("/ping", func(w http.ResponseWriter, r *http.Request) {
+	s.Route("/ping", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "pong\n")
 	}, Use(func(f http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +41,7 @@ func Test_NewServer(t *testing.T) {
 	}))
 
 	go func() {
-		s.Run()
+		s.Run(context.Background())
 	}()
 	sess := New(URL("http://127.0.0.1:9099"))
 	sess.DoRequest(context.Background(), Path("/echo"), Body("12345"), Logf(LogS))

@@ -2,8 +2,8 @@ package requests
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"time"
 )
 
@@ -36,12 +36,14 @@ type ServeMux struct {
 	next    []*ServeMux
 }
 
+var notFound = &ServeMux{handler: http.NotFound}
+
 // ServeHTTP implement http.Handler interface
 // 首先对路由进行校验,不满足的话直接404
 // 其次执行RequestEach对`http.Request`进行处理,如果处理失败的话，直接返回400
 // 最后处理中间件`requests.HttpHandlerFunc`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var current *ServeMux
+	current := notFound
 	for _, m := range mux.next {
 		if m.path == r.URL.Path {
 			current = m
@@ -49,19 +51,16 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if current == nil || current.handler == nil {
-		http.NotFound(w, r)
-		return
-	}
-
 	options := newOptions(mux.opts, current.opts...)
 	for _, each := range options.OnRequest {
 		if err := each(r.Context(), r); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprint(w, err)
-			return
+			current.handler = func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+			break
 		}
 	}
+
 	h := current.handler
 	for _, fn := range options.HttpHandlerFunc {
 		h = fn(h)
@@ -87,22 +86,40 @@ func NewServer(opts ...Option) *Server {
 	}
 }
 
-func (s *Server) Shutdown(ctx context.Context) error {
-	return s.srv.Shutdown(ctx)
-}
-
-func (s *Server) Run() error {
+func (s *Server) Run(ctx context.Context) error {
+	go func() {
+		select {
+		case <-ctx.Done():
+			if err := s.srv.Shutdown(ctx); err != nil {
+				Log("%s http shutdown: %v", time.Now().Format("2006-01-02 15:04:05"), err)
+			}
+		}
+	}()
 	Log("%s http serve %s", time.Now().Format("2006-01-02 15:04:05"), s.srv.Addr)
 	return s.srv.ListenAndServe()
 }
 
-// Path set pattern to handle
+// Route set pattern path to handle
 // path cannot override, so if your path not work, maybe it is already exists!
-func (s *Server) Path(path string, h func(http.ResponseWriter, *http.Request), opts ...Option) {
+func (s *Server) Route(path string, h func(http.ResponseWriter, *http.Request), opts ...Option) {
 	s.mux.next = append(s.mux.next, &ServeMux{path: path, handler: h, opts: opts})
 }
 
 // Use can set middleware which compatible with net/http.ServeMux.
-func (s *Server) Use(fn ...HttpHandlerFunc) {
+func (s *Server) Use(fn ...func(http.Handler) http.Handler) {
 	s.mux.opts = append(s.mux.opts, Use(fn...))
+}
+
+func (s *Server) Pprof() {
+	s.Route("/debug/pprof/", pprof.Index)
+	s.Route("/debug/pprof/allocs", pprof.Index)
+	s.Route("/debug/pprof/block", pprof.Index)
+	s.Route("/debug/pprof/goroutine", pprof.Index)
+	s.Route("/debug/pprof/heap", pprof.Index)
+	s.Route("/debug/pprof/mutex", pprof.Index)
+	s.Route("/debug/pprof/threadcreate", pprof.Index)
+	s.Route("/debug/pprof/cmdline", pprof.Cmdline)
+	s.Route("/debug/pprof/profile", pprof.Profile)
+	s.Route("/debug/pprof/symbol", pprof.Symbol)
+	s.Route("/debug/pprof/trace", pprof.Trace)
 }

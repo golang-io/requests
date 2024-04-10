@@ -264,9 +264,11 @@ func Setup(fn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
 	}
 }
 
-func Use(fn ...HttpHandlerFunc) Option {
+func Use(fn ...func(http.Handler) http.Handler) Option {
 	return func(o *Options) {
-		o.HttpHandlerFunc = append(o.HttpHandlerFunc, fn...)
+		for _, f := range fn {
+			o.HttpHandlerFunc = append(o.HttpHandlerFunc, WarpHttpHandler(f))
+		}
 	}
 }
 
