@@ -78,11 +78,8 @@ func Test_NewServer(t *testing.T) {
 	}()
 	time.Sleep(1 * time.Second)
 	sess := requests.New(requests.URL("http://127.0.0.1:9099"))
-	sess.DoRequest(context.Background(),
-		requests.Path("/echo"), requests.Body("12345"),
-		requests.Logf(requests.LogS), requests.Method("OPTIONS"),
-	)
-	//sess.DoRequest(context.Background(), Path("/echo"), Body("12345"), Logf(LogS), Method("GET"))
+	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(requests.LogS), requests.Method("OPTIONS"))
+	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(requests.LogS), requests.Method("GET"))
 
 	//sess.DoRequest(context.Background(), Path("/ping"), Logf(LogS))
 	//sess.DoRequest(context.Background(), Path("/1234"), Logf(LogS))
