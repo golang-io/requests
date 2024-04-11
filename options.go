@@ -33,8 +33,8 @@ type Options struct {
 	OnRequest  []func(context.Context, *http.Request) error
 	OnResponse []func(context.Context, *http.Response) error
 
-	// it is only used by server mode
-	HttpHandlerFunc []HttpHandlerFunc
+	// HttpHandler is only used by server mode
+	HttpHandler []func(http.Handler) http.Handler
 
 	// session used
 	LocalAddr net.Addr
@@ -257,17 +257,18 @@ func Proxy(addr string) Option {
 	}
 }
 
-// Setup use middleware
+// Setup is used for client middleware
 func Setup(fn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
 	return func(o *Options) {
 		o.RoundTripFunc = append(o.RoundTripFunc, fn...)
 	}
 }
 
+// Use is used for server middleware
 func Use(fn ...func(http.Handler) http.Handler) Option {
 	return func(o *Options) {
 		for _, f := range fn {
-			o.HttpHandlerFunc = append(o.HttpHandlerFunc, WarpHttpHandler(f))
+			o.HttpHandler = append(o.HttpHandler, f)
 		}
 	}
 }

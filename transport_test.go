@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func Test_Middleware(t *testing.T) {
+func Test_Setup(t *testing.T) {
 
 	sess := requests.New(
 		requests.RequestEach(func(ctx context.Context, r *http.Request) error {
@@ -22,15 +22,26 @@ func Test_Middleware(t *testing.T) {
 			t.Logf("session.ResponseEach end")
 			return nil
 		}),
-		requests.Setup(func(fn requests.HttpRoundTripFunc) requests.HttpRoundTripFunc {
-			return func(req *http.Request) (*http.Response, error) {
-				t.Logf("session.Setup start")
-				defer t.Logf("session.Setup defer end")
-				resp, err := fn(req)
-				t.Logf("session.Setup end")
-				return resp, err
-			}
-		}),
+		requests.Setup(
+			func(fn requests.HttpRoundTripFunc) requests.HttpRoundTripFunc {
+				return func(req *http.Request) (*http.Response, error) {
+					t.Logf("session.Setup start1")
+					defer t.Logf("session.Setup defer end1")
+					resp, err := fn(req)
+					t.Logf("session.Setup end1")
+					return resp, err
+				}
+			},
+			func(fn requests.HttpRoundTripFunc) requests.HttpRoundTripFunc {
+				return func(req *http.Request) (*http.Response, error) {
+					t.Logf("session.Setup start2")
+					defer t.Logf("session.Setup defer end2")
+					resp, err := fn(req)
+					t.Logf("session.Setup end2")
+					return resp, err
+				}
+			},
+		),
 	)
 
 	resp, err := sess.DoRequest(

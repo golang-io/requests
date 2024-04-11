@@ -8,22 +8,19 @@ import (
 	"time"
 )
 
-// HttpHandlerFunc return a handler function for the given middleware.
-type HttpHandlerFunc func(http.HandlerFunc) http.HandlerFunc
+var notFound = &ServeMux{handler: http.NotFoundHandler()}
 
-// WarpHttpHandler warp handler to handlerFunc
-func WarpHttpHandler(h func(http.Handler) http.Handler) HttpHandlerFunc {
-	return func(fn http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			h(fn).ServeHTTP(w, r)
-		}
-	}
+// ErrHandler handler err
+var ErrHandler = func(err string, code int) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, err, code)
+	})
 }
 
-// WarpHttpHandlerFunc warp handlerFunc to handler
-func WarpHttpHandlerFunc(f func(http.HandlerFunc) http.HandlerFunc) func(http.Handler) http.Handler {
-	return func(h http.Handler) http.Handler {
-		return f(func(w http.ResponseWriter, r *http.Request) {
+// WarpHttpHandler warp `http.Handler`.
+func WarpHttpHandler(h http.Handler) func(next http.Handler) http.Handler {
+	return func(http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		})
 	}
@@ -32,17 +29,15 @@ func WarpHttpHandlerFunc(f func(http.HandlerFunc) http.HandlerFunc) func(http.Ha
 // ServeMux implement ServeHTTP interface.
 type ServeMux struct {
 	path    string
-	handler http.HandlerFunc
+	handler http.Handler
 	opts    []Option
 	next    []*ServeMux
 }
 
-var notFound = &ServeMux{handler: http.NotFound}
-
 // ServeHTTP implement http.Handler interface
 // 首先对路由进行校验,不满足的话直接404
 // 其次执行RequestEach对`http.Request`进行处理,如果处理失败的话，直接返回400
-// 最后处理中间件`requests.HttpHandlerFunc`
+// 最后处理中间件`func(next http.Handler) http.Handler`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	current := notFound
 	for _, m := range mux.next {
@@ -55,20 +50,20 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	options := newOptions(mux.opts, current.opts...)
 	for _, each := range options.OnRequest {
 		if err := each(r.Context(), r); err != nil {
-			current.handler = func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-			}
+			current.handler = ErrHandler(err.Error(), http.StatusBadRequest)
 			break
 		}
 	}
 
 	h := current.handler
-	for _, fn := range options.HttpHandlerFunc {
-		h = fn(h)
+	for i := len(options.HttpHandler) - 1; i >= 0; i-- {
+		h = options.HttpHandler[i](h)
 	}
-	h(w, r)
+	h.ServeHTTP(w, r)
+
 }
 
+// Server server
 type Server struct {
 	mux *ServeMux
 	srv *http.Server
@@ -102,7 +97,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 // Route set pattern path to handle
 // path cannot override, so if your path not work, maybe it is already exists!
-func (s *Server) Route(path string, h func(http.ResponseWriter, *http.Request), opts ...Option) {
+func (s *Server) Route(path string, h http.HandlerFunc, opts ...Option) {
 	s.mux.next = append(s.mux.next, &ServeMux{path: path, handler: h, opts: opts})
 }
 
