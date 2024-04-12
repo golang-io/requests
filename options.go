@@ -35,8 +35,10 @@ type Options struct {
 
 	// HttpHandler is only used by server mode
 	HttpHandler []func(http.Handler) http.Handler
+	certFile    string
+	keyFile     string
 
-	// session used
+	// client session used
 	LocalAddr net.Addr
 	Proxy     func(*http.Request) (*url.URL, error)
 }
@@ -69,6 +71,12 @@ var (
 	MethodGet  = Method("GET")
 	MethodPost = Method("POST")
 )
+
+func CertAndKey(cert, key string) Option {
+	return func(o *Options) {
+		o.certFile, o.keyFile = cert, key
+	}
+}
 
 // MaxConns set max connections
 func MaxConns(conn int) Option {

@@ -5,9 +5,9 @@
     <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
     <a href="https://github.com/golang-io/requests/actions/workflows/go.yml"><img src="https://github.com/golang-io/requests/actions/workflows/go.yml/badge.svg?branch=main" alt="Build status"></a>
     <a href="https://goreportcard.com/report/github.com/golang-io/requests"><img src="https://goreportcard.com/badge/github.com/golang-io/requests" alt="go report"></a>
-
+	<a href="https://sourcegraph.com/github.com/golang-io/requests?badge"><img src="https://sourcegraph.com/github.com/golang-io/requests/-/badge.svg" alt="requests on Sourcegraph"></a>
 </div>
-
+<hr/>
 
 #### API Reference and User Guide available on [Read the Docs](https://pkg.go.dev/github.com/golang-io/requests)
 #### Supported Features & Best–Practices
@@ -205,47 +205,73 @@ Such as `request` params:
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-io/requests"
+	"github.com/gorilla/websocket"
 	"io"
+	"log"
 	"net/http"
 )
 
-func main() {
-	s := requests.NewServer(
-		requests.URL("0.0.0.0:1234"),
-		requests.Use(
-			requests.WarpHttpHandler(middleware.Recoverer),
-			requests.WarpHttpHandler(middleware.Logger)), //
-		//RequestEach(func(ctx context.Context, req *http.Request) error {
-		//	//fmt.Println("request each inject", req.URL.Path)
-		//	//if req.URL.Path == "/12345" {
-		//	//	return errors.New("request each inject")
-		//	//}
-		//	return nil
-		//}),
-		requests.Use(func(fn http.HandlerFunc) http.HandlerFunc {
-			return func(w http.ResponseWriter, r *http.Request) {
-				fn(w, r)
-			}
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
+func ws(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer conn.Close()
+	for {
+		messageType, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("Failed to read message: %v", err)
+			break
+		}
+
+		log.Printf("Received message: %s", message)
+
+		err = conn.WriteMessage(messageType, message)
+		if err != nil {
+			log.Printf("Failed to write message: %v", err)
+			break
+		}
+	}
+}
+
+func main() {
+	r := requests.NewServeMux(
+		requests.URL("0.0.0.0:1234"),
+		requests.Use(middleware.Recoverer, middleware.Logger),
+		requests.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				next.ServeHTTP(w, r)
+			})
 		}),
 	)
-	s.Path("/panic", func(w http.ResponseWriter, r *http.Request) {
+	r.Route("/panic", func(w http.ResponseWriter, r *http.Request) {
 		panic("panic test")
 	})
-	s.Path("/echo", func(w http.ResponseWriter, r *http.Request) {
+	r.Route("/echo", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(w, r.Body)
 	})
-	s.Path("/ping", func(w http.ResponseWriter, r *http.Request) {
+	r.Route("/ping", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "pong\n")
-	}, requests.Use(func(f http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			f(w, r)
-		}
+	}, requests.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})
 	}))
-	err := s.Run()
+	r.Route("/ws", ws)
+	err := requests.ListenAndServe(context.Background(), r)
 	fmt.Println(err)
 }
 ```

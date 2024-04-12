@@ -47,7 +47,7 @@ func RequestLogger() func(next http.Handler) http.Handler {
 }
 
 func Test_NewServer(t *testing.T) {
-	s := requests.NewServer(requests.URL("0.0.0.0:9099"),
+	r := requests.NewServeMux(requests.URL("0.0.0.0:9099"),
 		requests.Use(RequestLogger(), OPTIONS), // 	"github.com/go-chi/chi/middleware"
 		//RequestEach(func(ctx context.Context, req *http.Request) error {
 		//	//fmt.Println("request each inject", req.URL.Path)
@@ -60,10 +60,10 @@ func Test_NewServer(t *testing.T) {
 	//s.Path("", func(w http.ResponseWriter, r *http.Request) {
 	//	fmt.Fprintf(w, "1234!!!")
 	//})
-	s.Route("/echo", func(w http.ResponseWriter, r *http.Request) {
+	r.Route("/echo", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(w, r.Body)
 	})
-	s.Route("/ping", func(w http.ResponseWriter, r *http.Request) {
+	r.Route("/ping", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "pong\n")
 	}, requests.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +74,7 @@ func Test_NewServer(t *testing.T) {
 	)
 
 	go func() {
-		s.Run(context.Background())
+		requests.ListenAndServe(context.Background(), r)
 	}()
 	time.Sleep(1 * time.Second)
 	sess := requests.New(requests.URL("http://127.0.0.1:9099"))

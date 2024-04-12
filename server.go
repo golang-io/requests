@@ -34,6 +34,22 @@ type ServeMux struct {
 	next    []*ServeMux
 }
 
+// NewServeMux new router.
+func NewServeMux(opts ...Option) *ServeMux {
+	return &ServeMux{opts: opts}
+}
+
+// Route set pattern path to handle
+// path cannot override, so if your path not work, maybe it is already exists!
+func (mux *ServeMux) Route(path string, h http.HandlerFunc, opts ...Option) {
+	mux.next = append(mux.next, &ServeMux{path: path, handler: h, opts: opts})
+}
+
+// Use can set middleware which compatible with net/http.ServeMux.
+func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
+	mux.opts = append(mux.opts, Use(fn...))
+}
+
 // ServeHTTP implement http.Handler interface
 // 首先对路由进行校验,不满足的话直接404
 // 其次执行RequestEach对`http.Request`进行处理,如果处理失败的话，直接返回400
@@ -63,61 +79,38 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// Server server
-type Server struct {
-	mux *ServeMux
-	srv *http.Server
+func (mux *ServeMux) Pprof() {
+	mux.Route("/debug/pprof/", pprof.Index)
+	mux.Route("/debug/pprof/allocs", pprof.Index)
+	mux.Route("/debug/pprof/block", pprof.Index)
+	mux.Route("/debug/pprof/goroutine", pprof.Index)
+	mux.Route("/debug/pprof/heap", pprof.Index)
+	mux.Route("/debug/pprof/mutex", pprof.Index)
+	mux.Route("/debug/pprof/threadcreate", pprof.Index)
+	mux.Route("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.Route("/debug/pprof/profile", pprof.Profile)
+	mux.Route("/debug/pprof/symbol", pprof.Symbol)
+	mux.Route("/debug/pprof/trace", pprof.Trace)
 }
 
-// NewServer make server to serve.The options are auto handled.
-func NewServer(opts ...Option) *Server {
-	options := newOptions(opts)
-	mux := &ServeMux{opts: opts}
-	return &Server{
-		mux: mux,
-		srv: &http.Server{
-			Addr:    options.URL,
-			Handler: mux,
-		},
-	}
-}
+func ListenAndServe(ctx context.Context, h http.Handler, opts ...Option) error {
+	mux, _ := h.(*ServeMux)
+	options := newOptions(mux.opts, opts...)
+	s := &http.Server{Addr: options.URL, Handler: h}
 
-func (s *Server) Run(ctx context.Context) error {
 	go func() {
 		select {
 		case <-ctx.Done():
-			if err := s.srv.Shutdown(ctx); err != nil {
-				Log("%s http shutdown: %v", time.Now().Format("2006-01-02 15:04:05"), err)
+			if err := s.Shutdown(ctx); err != nil {
+				Log("%s http(s) shutdown: %v", time.Now().Format("2006-01-02 15:04:05"), err)
 			}
 		}
 	}()
-	Log("%s http serve %s", time.Now().Format("2006-01-02 15:04:05"), s.srv.Addr)
-	return s.srv.ListenAndServe()
-}
-
-// Route set pattern path to handle
-// path cannot override, so if your path not work, maybe it is already exists!
-func (s *Server) Route(path string, h http.HandlerFunc, opts ...Option) {
-	s.mux.next = append(s.mux.next, &ServeMux{path: path, handler: h, opts: opts})
-}
-
-// Use can set middleware which compatible with net/http.ServeMux.
-func (s *Server) Use(fn ...func(http.Handler) http.Handler) {
-	s.mux.opts = append(s.mux.opts, Use(fn...))
-}
-
-func (s *Server) Pprof() {
-	s.Route("/debug/pprof/", pprof.Index)
-	s.Route("/debug/pprof/allocs", pprof.Index)
-	s.Route("/debug/pprof/block", pprof.Index)
-	s.Route("/debug/pprof/goroutine", pprof.Index)
-	s.Route("/debug/pprof/heap", pprof.Index)
-	s.Route("/debug/pprof/mutex", pprof.Index)
-	s.Route("/debug/pprof/threadcreate", pprof.Index)
-	s.Route("/debug/pprof/cmdline", pprof.Cmdline)
-	s.Route("/debug/pprof/profile", pprof.Profile)
-	s.Route("/debug/pprof/symbol", pprof.Symbol)
-	s.Route("/debug/pprof/trace", pprof.Trace)
+	Log("%s http(s) serve %s", time.Now().Format("2006-01-02 15:04:05"), s.Addr)
+	if options.certFile == "" || options.keyFile == "" {
+		return s.ListenAndServe()
+	}
+	return s.ListenAndServeTLS(options.certFile, options.keyFile)
 }
 
 // ParseBody parse body from `Request.Body`.
