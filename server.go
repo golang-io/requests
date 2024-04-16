@@ -3,8 +3,13 @@ package requests
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"path"
+	"regexp"
 	"time"
 )
 
@@ -15,6 +20,60 @@ var ErrHandler = func(err string, code int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err, code)
 	})
+}
+
+// ServeFS serve fs. prefix is route prefix, dir is serve path
+// 这里path和prefix都必须以/结尾，否则的话只能处理/backup/a/b/，处理不了/backup/a/b的场景
+// eg: r.Route("/backup/", requests.ServeFS("/backup/", "/backup"), Method("GET"))
+func ServeFS(prefix, dir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.StripPrefix(prefix, http.FileServer(http.Dir(dir))).ServeHTTP(w, r)
+	}
+}
+
+// ServeUpload serve upload handler.
+// curl http://127.0.0.1:8080/_upload H 'Content-Type: multipart/form-data' -F '/abc/123=@xxx.txt' -F '456=@abc/xyz.txt'
+// upload files is $perfix/abc/123/xxx.txt and $perfix/456/xyz.txt
+func ServeUpload(prefix string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		reader, err := r.MultipartReader()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		save := func(prefix, dir, file string, r io.Reader) error {
+			if file == "" { // this is FormData
+				data, err := io.ReadAll(r)
+				fmt.Printf("FormData=[%s]\n", string(data))
+				return err
+			}
+			paths := path.Join(prefix, dir)
+			if err := os.MkdirAll(paths, 0755); err != nil {
+				return err
+			}
+			dst, err := os.Create(path.Join(paths, file))
+			if err != nil {
+				return err
+			}
+			defer dst.Close()
+			_, err = io.Copy(dst, r)
+			return err
+		}
+
+		for {
+			part, err := reader.NextPart()
+			if err == io.EOF {
+				break
+			}
+			//fmt.Printf("FileName=[%s], FormName=[%s]\n", part.FileName(), part.FormName())
+			if err := save(prefix, part.FormName(), part.FileName(), part); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		_, _ = fmt.Fprintf(w, "Successfully Uploaded File\n")
+	}
 }
 
 // WarpHttpHandler warp `http.Handler`.
@@ -29,6 +88,7 @@ func WarpHttpHandler(h http.Handler) func(next http.Handler) http.Handler {
 // ServeMux implement ServeHTTP interface.
 type ServeMux struct {
 	path    string
+	pattern *regexp.Regexp
 	handler http.Handler
 	opts    []Option
 	next    []*ServeMux
@@ -42,7 +102,7 @@ func NewServeMux(opts ...Option) *ServeMux {
 // Route set pattern path to handle
 // path cannot override, so if your path not work, maybe it is already exists!
 func (mux *ServeMux) Route(path string, h http.HandlerFunc, opts ...Option) {
-	mux.next = append(mux.next, &ServeMux{path: path, handler: h, opts: opts})
+	mux.next = append(mux.next, &ServeMux{path: path, pattern: regexp.MustCompile(path), handler: h, opts: opts})
 }
 
 // Use can set middleware which compatible with net/http.ServeMux.
@@ -57,7 +117,7 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	current := notFound
 	for _, m := range mux.next {
-		if m.path == r.URL.Path {
+		if m.pattern.MatchString(r.URL.Path) {
 			current = m
 			break
 		}
@@ -81,17 +141,11 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Pprof debug
 func (mux *ServeMux) Pprof() {
-	mux.Route("/debug/pprof/", pprof.Index)
-	mux.Route("/debug/pprof/allocs", pprof.Index)
-	mux.Route("/debug/pprof/block", pprof.Index)
-	mux.Route("/debug/pprof/goroutine", pprof.Index)
-	mux.Route("/debug/pprof/heap", pprof.Index)
-	mux.Route("/debug/pprof/mutex", pprof.Index)
-	mux.Route("/debug/pprof/threadcreate", pprof.Index)
 	mux.Route("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.Route("/debug/pprof/profile", pprof.Profile)
 	mux.Route("/debug/pprof/symbol", pprof.Symbol)
 	mux.Route("/debug/pprof/trace", pprof.Trace)
+	mux.Route("/debug/pprof/", pprof.Index)
 }
 
 // ListenAndServe listens on the TCP network address srv.Addr and then

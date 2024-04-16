@@ -19,6 +19,7 @@
 * Sessions with Cookie Persistence
 * Basic & Digest Authentication
 * Implement http.RoundTripper fully compatible `net/http`
+* Offer File System to upload or download files easily
 
 
 ### Quick Start
