@@ -96,6 +96,10 @@ func NewNode(path string, h http.Handler, opts ...Option) *Node {
 
 // Add node
 func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
+	if path == "" {
+		panic("path is empty")
+	}
+
 	current := node
 	for _, p := range strings.Split(path[1:], "/") {
 		if _, ok := current.next[p]; !ok {
@@ -108,6 +112,7 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 }
 
 // Find node
+// 按照最长的匹配原则，/a/b/c/会优先返回/a/b/c/,其次返回/a/b/c，再返回/a/b，再返回/a，再返回/
 func (node *Node) Find(path string) *Node {
 	current := node
 	for _, p := range strings.Split(path, "/") {
