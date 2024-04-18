@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 )
 
 func show(prompt string, b []byte, mLimit int) string {
@@ -45,12 +44,12 @@ func copyBody(b io.ReadCloser) (*bytes.Buffer, io.ReadCloser, error) {
 
 // LogS supply default handle Stat, print to stdout.
 func LogS(_ context.Context, stat *Stat) {
-	_, _ = fmt.Fprintf(os.Stdout, "%s\n", stat)
+	Log("%s\n", stat)
 }
 
 // StreamS supply default handle Stream, print raw msg in stream to stdout.
 func StreamS(i int64, raw []byte) error {
-	_, err := fmt.Fprintf(os.Stdout, "i=%d, raw=%s", i, raw)
+	_, err := fmt.Printf("i=%d, raw=%s\n", i, raw)
 	return err
 }
 

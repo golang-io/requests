@@ -5,30 +5,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"path"
-	"regexp"
-	"time"
+	"strings"
 )
-
-var notFound = &ServeMux{handler: http.NotFoundHandler()}
 
 // ErrHandler handler err
 var ErrHandler = func(err string, code int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err, code)
 	})
-}
-
-// ServeFS serve fs. prefix is route prefix, dir is serve path
-// 这里path和prefix都必须以/结尾，否则的话只能处理/backup/a/b/，处理不了/backup/a/b的场景
-// eg: r.Route("/backup/", requests.ServeFS("/backup/", "/backup"), Method("GET"))
-func ServeFS(prefix, dir string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		http.StripPrefix(prefix, http.FileServer(http.Dir(dir))).ServeHTTP(w, r)
-	}
 }
 
 // ServeUpload serve upload handler.
@@ -87,22 +76,80 @@ func WarpHttpHandler(h http.Handler) func(next http.Handler) http.Handler {
 
 // ServeMux implement ServeHTTP interface.
 type ServeMux struct {
+	opts []Option
+	Root *Node
+}
+
+// Node trie node
+type Node struct {
 	path    string
-	pattern *regexp.Regexp
 	handler http.Handler
 	opts    []Option
-	next    []*ServeMux
+	next    map[string]*Node
+}
+
+// NewNode new
+func NewNode(path string, h http.Handler, opts ...Option) *Node {
+	return &Node{path: path, handler: h, opts: opts, next: make(map[string]*Node)}
+
+}
+
+// Add node
+func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
+	current := node
+	for _, p := range strings.Split(path[1:], "/") {
+		if _, ok := current.next[p]; !ok {
+			current.next[p] = NewNode(p, http.NotFoundHandler())
+		}
+		current = current.next[p]
+	}
+	current.handler, current.opts = h, opts
+
+}
+
+// Find node
+func (node *Node) Find(path string) *Node {
+	current := node
+	for _, p := range strings.Split(path, "/") {
+		if next, ok := current.next[p]; !ok {
+			break
+		} else {
+			current = next
+		}
+	}
+	return current
+}
+
+func (node *Node) paths() []string {
+	var v []string
+	for k := range node.next {
+		v = append(v, k)
+	}
+	return v
+}
+
+// Print print trie tree struct
+func (node *Node) Print() {
+	node.print(0)
+}
+
+func (node *Node) print(m int) {
+	paths := node.paths()
+	fmt.Printf("%spath=%s, handler=%v, next=%#v\n", strings.Repeat("\t", m), node.path, node.handler, paths)
+	for _, p := range paths {
+		node.next[p].print(m + 1)
+	}
 }
 
 // NewServeMux new router.
 func NewServeMux(opts ...Option) *ServeMux {
-	return &ServeMux{opts: opts}
+	return &ServeMux{opts: opts, Root: NewNode("/", http.NotFoundHandler())}
 }
 
 // Route set pattern path to handle
 // path cannot override, so if your path not work, maybe it is already exists!
 func (mux *ServeMux) Route(path string, h http.HandlerFunc, opts ...Option) {
-	mux.next = append(mux.next, &ServeMux{path: path, pattern: regexp.MustCompile(path), handler: h, opts: opts})
+	mux.Root.Add(path, h, opts...)
 }
 
 // Use can set middleware which compatible with net/http.ServeMux.
@@ -115,13 +162,7 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 // 其次执行RequestEach对`http.Request`进行处理,如果处理失败的话，直接返回400
 // 最后处理中间件`func(next http.Handler) http.Handler`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	current := notFound
-	for _, m := range mux.next {
-		if m.pattern.MatchString(r.URL.Path) {
-			current = m
-			break
-		}
-	}
+	current := mux.Root.Find(r.URL.Path[1:])
 
 	options := newOptions(mux.opts, current.opts...)
 	for _, each := range options.OnRequest {
@@ -131,21 +172,20 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h := current.handler
-	for i := len(options.HttpHandler) - 1; i >= 0; i-- {
-		h = options.HttpHandler[i](h)
+	handler := current.handler
+	for _, h := range options.HttpHandler {
+		handler = h(handler)
 	}
-	h.ServeHTTP(w, r)
-
+	handler.ServeHTTP(w, r)
 }
 
 // Pprof debug
 func (mux *ServeMux) Pprof() {
+	mux.Route("/debug/pprof", pprof.Index)
 	mux.Route("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.Route("/debug/pprof/profile", pprof.Profile)
 	mux.Route("/debug/pprof/symbol", pprof.Symbol)
 	mux.Route("/debug/pprof/trace", pprof.Trace)
-	mux.Route("/debug/pprof/", pprof.Index)
 }
 
 // ListenAndServe listens on the TCP network address srv.Addr and then
@@ -172,11 +212,11 @@ func ListenAndServe(ctx context.Context, h http.Handler, opts ...Option) error {
 		select {
 		case <-ctx.Done():
 			if err := s.Shutdown(ctx); err != nil {
-				Log("%s http(s) shutdown: %v", time.Now().Format("2006-01-02 15:04:05"), err)
+				log.Println("http(s) shutdown: ", err)
 			}
 		}
 	}()
-	Log("%s http(s) serve %s", time.Now().Format("2006-01-02 15:04:05"), s.Addr)
+	log.Println("http(s) serve", s.Addr)
 	if options.certFile == "" || options.keyFile == "" {
 		return s.ListenAndServe()
 	}
@@ -188,5 +228,4 @@ func ParseBody(r *http.Request) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
 	_, err := buf.ReadFrom(r.Body)
 	return &buf, err
-
 }

@@ -10,20 +10,22 @@ import (
 	"time"
 )
 
-var OPTIONS = func(next http.Handler) http.Handler {
-	fmt.Println("OPTIONS 1")
+var STEP1 = func(next http.Handler) http.Handler {
+	fmt.Println("STEP1 1")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("STEP1 2")
+		next.ServeHTTP(w, r)
+		fmt.Println("STEP1 3")
+	})
+}
 
-	f := func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("OPTIONS 2")
-		if r.Method == http.MethodOptions {
-			http.Error(w, "OPTIONS TEST", http.StatusBadRequest)
-		} else {
-			next.ServeHTTP(w, r)
-		}
-		fmt.Println("OPTIONS 3")
-
-	}
-	return http.HandlerFunc(f)
+var STEP2 = func(next http.Handler) http.Handler {
+	fmt.Println("STEP2 1")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("STEP2 2")
+		next.ServeHTTP(w, r)
+		fmt.Println("STEP2 3")
+	})
 }
 
 // RequestLogger returns a logger handler using a custom LogFormatter.
@@ -48,7 +50,7 @@ func RequestLogger() func(next http.Handler) http.Handler {
 
 func Test_NewServer(t *testing.T) {
 	r := requests.NewServeMux(requests.URL("0.0.0.0:9099"),
-		requests.Use(RequestLogger(), OPTIONS), // 	"github.com/go-chi/chi/middleware"
+		requests.Use(RequestLogger(), STEP1, STEP2), // 	"github.com/go-chi/chi/middleware"
 		//RequestEach(func(ctx context.Context, req *http.Request) error {
 		//	//fmt.Println("request each inject", req.URL.Path)
 		//	//if req.URL.Path == "/12345" {
@@ -84,4 +86,22 @@ func Test_NewServer(t *testing.T) {
 	//sess.DoRequest(context.Background(), Path("/ping"), Logf(LogS))
 	//sess.DoRequest(context.Background(), Path("/1234"), Logf(LogS))
 
+}
+
+var f = func(w http.ResponseWriter, r *http.Request) {
+	_, _ = fmt.Fprintf(w, "pong\n")
+}
+
+func Test_Node(t *testing.T) {
+	r := requests.NewNode("/", nil)
+	r.Add("/abc/def/ghi", f)
+	r.Add("/abc/def/xyz", f)
+	r.Add("/1/2/3", f)
+	r.Add("/abc/def", f)
+	r.Add("/abc/def/", f)
+	r.Add("/abc/def/", f)
+	r.Add("/", f)
+	r.Print()
+	//go requests.ListenAndServe(context.Background(), r, requests.URL("0.0.0.0:1234"))
+	//fmt.Println(r)
 }

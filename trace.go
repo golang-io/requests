@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http/httptrace"
 	"net/textproto"
-	"os"
 )
 
 // ClientTrace is a set of hooks to run at various stages of an outgoing
@@ -120,5 +119,5 @@ var trace = &httptrace.ClientTrace{
 
 // Log print
 func Log(format string, v ...any) {
-	_, _ = fmt.Fprintf(os.Stderr, format+"\n", v...)
+	_, _ = fmt.Printf(format+"\n", v...)
 }
