@@ -6,19 +6,32 @@ import (
 )
 
 const RequestId = "Request-Id"
+const dateTime = "2006-01-02 15:04:05.000"
 
 // Stat stats
 type Stat struct {
-	RequestId string
+	RequestId string `json:"RequestId"`
 	StartAt   string `json:"StartAt"`
 	Cost      int64  `json:"Cost"`
-	Request   struct {
+
+	Request struct {
+		// Remote is remote addr in server side,
+		// For client requests, it is unused.
+		Remote string `json:"Remote"`
+
+		// URL is Request.URL
+		// For client requests, is request addr. contains schema://ip:port/path/xx
+		// For server requests, is only path. eg: /api/v1/xxx
+		URL    string            `json:"URL"`
 		Method string            `json:"Method"`
 		Header map[string]string `json:"Header"`
-		URL    string            `json:"URL"`
 		Body   any               `json:"Body"`
 	} `json:"Request"`
 	Response struct {
+
+		// URL is server addr(http://127.0.0.1:8080).
+		// For client requests, it is unused.
+		URL           string            `json:"URL"`
 		Header        map[string]string `json:"Header"`
 		Body          any               `json:"Body"`
 		StatusCode    int               `json:"StatusCode"`
@@ -32,8 +45,6 @@ func (stat *Stat) String() string {
 	b, _ := json.Marshal(stat)
 	return string(b)
 }
-
-const dateTime = "2006-01-02 15:04:05.000"
 
 // StatLoad stat.
 func StatLoad(resp *Response) *Stat {

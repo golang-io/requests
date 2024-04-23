@@ -25,7 +25,7 @@
 ### Quick Start
 #### Get Started
 ```shell
-cat examples/example_1/main.go
+cat github.com/golang-io/examples/example_1/main.go
 ```
 
 ```go
@@ -44,7 +44,7 @@ func main() {
 ```
 
 ```shell
-$ go run examples/example_1/main.go
+$ go run github.com/golang-io/examples/example_1/main.go
 * Connect: httpbin.org:80
 * Got Conn: <nil> -> <nil>
 * Connect: httpbin.org:443
@@ -112,7 +112,7 @@ func main() {
 ```
 
 ```shell
-% go run examples/example_2/main.go
+% go run github.com/golang-io/examples/example_2/main.go
 2024/03/22 20:31:12 {
   "args": {}, 
   "headers": {
@@ -153,7 +153,7 @@ func main() {
 
 ```
 ```shell
-% go run examples/example_3/main.go
+% go run github.com/golang-io/examples/example_3/main.go
 2024/03/22 20:43:25 resp={
   "args": {}, 
   "data": "Hello world", 
@@ -285,7 +285,7 @@ pong
 ```
 And, there are some logs from server.
 ```shell
-% go run examples/server/example_1/main.go
+% go run github.com/golang-io/examples/server/example_1/main.go
 2024-03-27 02:47:47 http serve 0.0.0.0:1234
 2024/03/27 02:47:59 "GET http://127.0.0.1:1234/echo HTTP/1.1" from 127.0.0.1:60922 - 000 0B in 9.208µs
 path use {}
