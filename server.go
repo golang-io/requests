@@ -15,8 +15,8 @@ var ErrHandler = func(err string, code int) http.Handler {
 	})
 }
 
-// WarpHttpHandler warp `http.Handler`.
-func WarpHttpHandler(next http.Handler) func(http.Handler) http.Handler {
+// WarpHandler warp `http.Handler`.
+func WarpHandler(next http.Handler) func(http.Handler) http.Handler {
 	return func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			next.ServeHTTP(w, r)

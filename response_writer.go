@@ -6,11 +6,12 @@ import (
 	"net/http"
 )
 
+// ResponseWriter wrap `http.ResponseWriter` interface.
 type ResponseWriter struct {
 	http.ResponseWriter
 	wroteHeader   bool
-	statusCode    int
-	contentLength int64
+	StatusCode    int
+	ContentLength int64
 }
 
 func (w *ResponseWriter) WriteHeader(statusCode int) {
@@ -18,14 +19,14 @@ func (w *ResponseWriter) WriteHeader(statusCode int) {
 		return
 	}
 	w.wroteHeader = true
-	w.statusCode = statusCode
+	w.StatusCode = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
 }
 
 func (w *ResponseWriter) Write(buf []byte) (int, error) {
 	w.WriteHeader(http.StatusOK)
 	n, err := w.ResponseWriter.Write(buf)
-	w.contentLength += int64(n)
+	w.ContentLength += int64(n)
 	return n, err
 }
 

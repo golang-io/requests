@@ -6,8 +6,8 @@ import (
 )
 
 // WarpRoundTripper warp `http.RoundTripper`.
-func WarpRoundTripper(h http.RoundTripper) func(http.RoundTripper) http.RoundTripper {
-	return func(next http.RoundTripper) http.RoundTripper {
+func WarpRoundTripper(next http.RoundTripper) func(http.RoundTripper) http.RoundTripper {
+	return func(http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			return next.RoundTrip(r)
 		})
