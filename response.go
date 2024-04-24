@@ -73,11 +73,3 @@ func streamRead(reader io.Reader, f func(int64, []byte) error) (int64, error) {
 		}
 	}
 }
-
-// CopyResponseBody xx
-func CopyResponseBody(resp *http.Response) (b *bytes.Buffer, err error) {
-	if b, resp.Body, err = copyBody(resp.Body); err != nil {
-		return nil, err
-	}
-	return b, err
-}

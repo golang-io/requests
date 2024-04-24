@@ -44,28 +44,27 @@ func NewRequestWithContext(ctx context.Context, options Options) (*http.Request,
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, options.Method, options.URL, body)
+	r, err := http.NewRequestWithContext(ctx, options.Method, options.URL, body)
 	if err != nil {
 		return nil, err
 	}
 
-	// req.URL.Path = path.Join(req.URL.Path, path.Join(opt.Path...))
-	for _, path := range options.Path {
-		req.URL.Path += path
+	for _, p := range options.Path {
+		r.URL.Path += p
 	}
 
 	for k, v := range options.Params {
-		if req.URL.RawQuery != "" {
-			req.URL.RawQuery += "&"
+		if r.URL.RawQuery != "" {
+			r.URL.RawQuery += "&"
 		}
-		req.URL.RawQuery += k + "=" + url.QueryEscape(fmt.Sprintf("%v", v))
+		r.URL.RawQuery += k + "=" + url.QueryEscape(fmt.Sprintf("%v", v))
 	}
 
-	req.Header = options.Header
+	r.Header = options.Header
 
 	for _, cookie := range options.Cookies {
-		req.AddCookie(&cookie)
+		r.AddCookie(&cookie)
 	}
 
-	return req, nil
+	return r, nil
 }

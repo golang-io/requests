@@ -35,7 +35,6 @@ func Test_ProxyGet(t *testing.T) {
 		context.Background(),
 		Method("GET"),
 		URL("http://httpbin.org"),
-		TraceLv(9),
 	)
 	if err != nil {
 		t.Errorf("%s", err.Error())
@@ -68,7 +67,7 @@ func Test_PostBody(t *testing.T) {
 		}),
 		Body(`{"body":"QWER"}`),
 		Header("hello", "world"),
-		TraceLv(9),
+		//TraceLv(9),
 		//Logf(func(ctx context.Context, stat Stat) {
 		//	fmt.Println(stat)
 		//}),
@@ -95,7 +94,7 @@ func Test_FormPost(t *testing.T) {
 			"c": 3,
 			"d": []int{1, 2, 3},
 		}),
-		TraceLv(9),
+		//TraceLv(9),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -149,7 +148,7 @@ func Test_Stream(t *testing.T) {
 	s := New(URL("http://cache-api.polaris:80/stream"), Body(body))
 	resp, err := s.DoRequest(context.Background(), MethodPost,
 		Header("Content-Type", "application/json"),
-		TraceLv(3),
+		//TraceLv(3),
 		Logf(func(ctx context.Context, stat *Stat) {
 			fmt.Println(stat)
 		}),
@@ -158,33 +157,6 @@ func Test_Stream(t *testing.T) {
 			return nil
 		}))
 	t.Logf("%v, err=%v", resp.Stat(), err)
-
-}
-
-func Test_ForEach(t *testing.T) {
-	s := New(RequestEach(func(ctx context.Context, req *http.Request) error {
-		if req.Header.Get(RequestId) == "" {
-			requestId, ok := ctx.Value(RequestId).(string)
-			if !ok {
-				requestId = "mytest"
-			}
-			req.Header.Set(RequestId, requestId)
-		}
-
-		return nil
-	}), ResponseEach(func(ctx context.Context, resp *http.Response) error {
-		if resp.Header.Get("RequestId") == "" {
-			requestId, ok := ctx.Value("RequestId").(string)
-			if !ok {
-				requestId = "myResponse"
-			}
-			resp.Header.Set("Request-Id", requestId)
-		}
-
-		return nil
-	}))
-	resp, err := s.DoRequest(context.Background(), URL("http://httpbin.org/get"), TraceLv(4, 10024))
-	t.Logf("%v, %v", resp.Stat(), err)
 
 }
 
@@ -201,7 +173,6 @@ func TestResponse_Download(t *testing.T) {
 	defer f.Close()
 	sum := 0
 	resp, err := sess.DoRequest(context.Background(),
-		TraceLv(3),
 		Stream(func(i int64, row []byte) error {
 			cnt, err := f.Write(row)
 			sum += cnt

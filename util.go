@@ -8,26 +8,28 @@ import (
 	"net/http"
 )
 
-func show(prompt string, b []byte, mLimit int) string {
+// ParseBody parse body from `Request.Body`.
+func ParseBody(r io.ReadCloser) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
-	for _, line := range bytes.Split(b, []byte("\n")) {
-		buf.Write([]byte(prompt))
-		buf.Write(bytes.Replace(line, []byte("%"), []byte("%%"), -1))
-		buf.WriteString("\n")
+	if r == nil || r == http.NoBody {
+		// No copying needed. Preserve the magic sentinel meaning of NoBody.
+		return &buf, nil
 	}
-	str := buf.String()
-	if len(str) > mLimit {
-		return fmt.Sprintf("%s...[Len=%d, Truncated[%d]]", str[:mLimit], len(str), mLimit)
+	if _, err := buf.ReadFrom(r); err != nil {
+		return &buf, err
 	}
-	return str
+	if err := r.Close(); err != nil {
+		return &buf, err
+	}
+	return &buf, nil
 }
 
-// copyBody reads all of b to memory and then returns two equivalent
+// CopyBody reads all of b to memory and then returns two equivalent
 // ReadClosers yielding the same bytes.
 //
 // It returns an error if the initial slurp of all bytes fails. It does not attempt
 // to make the returned ReadClosers have identical error-matching behavior.
-func copyBody(b io.ReadCloser) (*bytes.Buffer, io.ReadCloser, error) {
+func CopyBody(b io.ReadCloser) (*bytes.Buffer, io.ReadCloser, error) {
 	var buf bytes.Buffer
 	if b == nil || b == http.NoBody {
 		// No copying needed. Preserve the magic sentinel meaning of NoBody.
@@ -42,6 +44,11 @@ func copyBody(b io.ReadCloser) (*bytes.Buffer, io.ReadCloser, error) {
 	return &buf, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
+// Log print
+func Log(format string, v ...any) {
+	_, _ = fmt.Printf(format+"\n", v...)
+}
+
 // LogS supply default handle Stat, print to stdout.
 func LogS(_ context.Context, stat *Stat) {
 	Log("%s\n", stat)
@@ -51,8 +58,4 @@ func LogS(_ context.Context, stat *Stat) {
 func StreamS(i int64, raw []byte) error {
 	_, err := fmt.Printf("i=%d, raw=%s\n", i, raw)
 	return err
-}
-
-func RetryHandle(req *http.Request, resp *http.Response, err error) error {
-	return fmt.Errorf("retry")
 }

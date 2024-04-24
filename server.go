@@ -1,10 +1,8 @@
 package requests
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/pprof"
 	"strings"
@@ -18,18 +16,12 @@ var ErrHandler = func(err string, code int) http.Handler {
 }
 
 // WarpHttpHandler warp `http.Handler`.
-func WarpHttpHandler(h http.Handler) func(next http.Handler) http.Handler {
+func WarpHttpHandler(next http.Handler) func(http.Handler) http.Handler {
 	return func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
+			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// ServeMux implement ServeHTTP interface.
-type ServeMux struct {
-	opts []Option
-	Root *Node
 }
 
 // Node trie node
@@ -43,7 +35,6 @@ type Node struct {
 // NewNode new
 func NewNode(path string, h http.Handler, opts ...Option) *Node {
 	return &Node{path: path, handler: h, opts: opts, next: make(map[string]*Node)}
-
 }
 
 // Add node
@@ -98,15 +89,38 @@ func (node *Node) print(m int) {
 	}
 }
 
+// ServeMux implement ServeHTTP interface.
+type ServeMux struct {
+	opts       []Option
+	onStartup  func(s *http.Server)
+	onShutdown func(s *http.Server)
+	root       *Node
+}
+
 // NewServeMux new router.
 func NewServeMux(opts ...Option) *ServeMux {
-	return &ServeMux{opts: opts, Root: NewNode("/", http.NotFoundHandler())}
+	return &ServeMux{
+		opts:       opts,
+		onStartup:  func(s *http.Server) {},
+		onShutdown: func(s *http.Server) {},
+		root:       NewNode("/", http.NotFoundHandler()),
+	}
+}
+
+// OnStartup do something before serve startup
+func (mux *ServeMux) OnStartup(f func(s *http.Server)) {
+	mux.onStartup = f
+}
+
+// OnShutdown do something after serve shutdown
+func (mux *ServeMux) OnShutdown(f func(s *http.Server)) {
+	mux.onShutdown = f
 }
 
 // Route set pattern path to handle
 // path cannot override, so if your path not work, maybe it is already exists!
 func (mux *ServeMux) Route(path string, h http.HandlerFunc, opts ...Option) {
-	mux.Root.Add(path, h, opts...)
+	mux.root.Add(path, h, opts...)
 }
 
 // Use can set middleware which compatible with net/http.ServeMux.
@@ -119,15 +133,9 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 // 其次执行RequestEach对`http.Request`进行处理,如果处理失败的话，直接返回400
 // 最后处理中间件`func(next http.Handler) http.Handler`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	current := mux.Root.Find(r.URL.Path[1:])
+	current := mux.root.Find(r.URL.Path[1:])
 
 	options := newOptions(mux.opts, current.opts...)
-	for _, each := range options.OnRequest {
-		if err := each(r.Context(), r); err != nil {
-			current.handler = ErrHandler(err.Error(), http.StatusBadRequest)
-			break
-		}
-	}
 
 	handler := current.handler
 	for _, h := range options.HttpHandler {
@@ -164,25 +172,20 @@ func ListenAndServe(ctx context.Context, h http.Handler, opts ...Option) error {
 	mux, _ := h.(*ServeMux)
 	options := newOptions(mux.opts, opts...)
 	s := &http.Server{Addr: options.URL, Handler: h}
+	s.RegisterOnShutdown(func() { mux.onShutdown(s) })
 
 	go func() {
 		select {
 		case <-ctx.Done():
 			if err := s.Shutdown(ctx); err != nil {
-				log.Println("http(s) shutdown: ", err)
+				panic(err)
 			}
 		}
 	}()
-	log.Println("http(s) serve", s.Addr)
+
+	mux.onStartup(s)
 	if options.certFile == "" || options.keyFile == "" {
 		return s.ListenAndServe()
 	}
 	return s.ListenAndServeTLS(options.certFile, options.keyFile)
-}
-
-// ParseBody parse body from `Request.Body`.
-func ParseBody(r *http.Request) (*bytes.Buffer, error) {
-	var buf bytes.Buffer
-	_, err := buf.ReadFrom(r.Body)
-	return &buf, err
 }

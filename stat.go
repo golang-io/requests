@@ -55,7 +55,7 @@ func StatLoad(resp *Response) *Stat {
 	if resp.Response != nil {
 		var err error
 		if resp.Content == nil || resp.Content.Len() == 0 {
-			if resp.Content, err = CopyResponseBody(resp.Response); err != nil {
+			if resp.Content, err = ParseBody(resp.Response.Body); err != nil {
 				stat.Err += fmt.Sprintf("read response: %s", err)
 				return stat
 			}
@@ -83,7 +83,7 @@ func StatLoad(resp *Response) *Stat {
 				return stat
 			}
 
-			buf, _, err := copyBody(body)
+			buf, err := ParseBody(body)
 			if err != nil {
 				stat.Err += fmt.Sprintf("read request2: %s", err)
 				return stat

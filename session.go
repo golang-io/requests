@@ -13,9 +13,6 @@ import (
 	"time"
 )
 
-// emptyBody is an instance of empty reader.
-var emptyBody = io.NopCloser(strings.NewReader(""))
-
 // Session httpclient session
 // Clients and Transports are safe for concurrent use by multiple goroutines
 // for efficiency should only be created once and re-used.
@@ -54,7 +51,7 @@ func New(opts ...Option) *Session {
 		MaxIdleConns: options.MaxConns, // 设置连接池的大小为100个连接
 
 		// 默认的DefaultMaxIdleConnsPerHost = 2 这个设置意思时尽管整个连接池是100个连接，但是每个host只有2个。
-		// 上面的例子中有100个gooutine尝试并发的对同一个主机发起http请求，但是连接池只能存放两个连接。
+		// 上面的例子中有100个goroutine尝试并发的对同一个主机发起http请求，但是连接池只能存放两个连接。
 		// 所以，第一轮完成请求时，2个连接保持打开状态。但是剩下的98个连接将会被关闭并进入TIME_WAIT状态。
 		// 因为这在一个循环中出现，所以会很快就积累上成千上万的TIME_WAIT状态的连接。
 		// 最终，会耗尽主机的所有可用端口，从而导致无法打开新的连接。
@@ -82,23 +79,24 @@ func New(opts ...Option) *Session {
 
 // RoundTrip implements the [RoundTripper] interface.
 // Like the `http.RoundTripper` interface, the error types returned by RoundTrip are unspecified.
-func (s *Session) RoundTrip(req *http.Request) (*http.Response, error) {
-	return s.RoundTripper()(req)
+func (s *Session) RoundTrip(r *http.Request) (*http.Response, error) {
+	return s.RoundTripper().RoundTrip(r)
 }
 
-// RoundTripper return HttpRoundTripFunc.
-// RequestEach: session.RequestEach -> request.RequestEach
+// RoundTripper return http.RoundTripper.
 // Setup: session.Setup -> request.Setup
-// ResponseEach: session.ResponseEach -> request.ResponseEach
-func (s *Session) RoundTripper(opts ...Option) HttpRoundTripFunc {
-	options := newOptions(s.opts, opts...)
-	if options.Transport == nil {
-		options.Transport = s.client.Do
-	}
-	for i := len(options.RoundTripFunc) - 1; i >= 0; i-- { // setup reverse
-		options.Transport = options.RoundTripFunc[i](options.Transport)
-	}
-	return each(options)(options.Transport)
+func (s *Session) RoundTripper(opts ...Option) http.RoundTripper {
+	return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		options := newOptions(s.opts, opts...)
+		if options.Transport == nil {
+			options.Transport = RoundTripperFunc(s.client.Do)
+		}
+
+		for _, tr := range options.HttpRoundTripper {
+			options.Transport = tr(options.Transport)
+		}
+		return options.Transport.RoundTrip(r)
+	})
 }
 
 // Do send a request and  return `http.Response`. DO NOT forget close `resp.Body`.
@@ -108,7 +106,7 @@ func (s *Session) Do(ctx context.Context, opts ...Option) (*http.Response, error
 	if err != nil {
 		return &http.Response{}, fmt.Errorf("newRequest: %w", err)
 	}
-	return s.RoundTripper(opts...)(req)
+	return s.RoundTripper(opts...).RoundTrip(req)
 }
 
 // DoRequest send a request and return a response, and is safely close `resp.Body`.
@@ -119,11 +117,11 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 		return resp, resp.Err
 	}
 
-	resp.Response, resp.Err = s.RoundTripper(opts...)(resp.Request)
+	resp.Response, resp.Err = s.RoundTripper(opts...).RoundTrip(resp.Request)
 	if resp.Response == nil {
-		resp.Response = &http.Response{Body: emptyBody}
+		resp.Response = &http.Response{Body: http.NoBody}
 	} else if resp.Response.Body == nil {
-		resp.Response.Body = emptyBody
+		resp.Response.Body = http.NoBody
 	}
 
 	defer resp.Response.Body.Close()

@@ -14,24 +14,22 @@ import (
 
 // Options request
 type Options struct {
-	Method        string
-	URL           string
-	Path          []string
-	Params        map[string]any
-	body          any
-	Header        http.Header
-	Cookies       []http.Cookie
-	Timeout       time.Duration
-	MaxConns      int
-	TraceLv       int
-	mLimit        int
-	Verify        bool
-	Stream        func(int64, []byte) error
-	Transport     HttpRoundTripFunc
-	RoundTripFunc []func(HttpRoundTripFunc) HttpRoundTripFunc
+	Method    string
+	URL       string
+	Path      []string
+	Params    map[string]any
+	body      any
+	Header    http.Header
+	Cookies   []http.Cookie
+	Timeout   time.Duration
+	MaxConns  int
+	TraceLv   int
+	mLimit    int
+	Verify    bool
+	Stream    func(int64, []byte) error
+	Transport http.RoundTripper
 
-	OnRequest  []func(context.Context, *http.Request) error
-	OnResponse []func(context.Context, *http.Response) error
+	HttpRoundTripper []func(http.RoundTripper) http.RoundTripper
 
 	// HttpHandler is only used by server mode
 	HttpHandler []func(http.Handler) http.Handler
@@ -225,28 +223,16 @@ func Stream(stream func(int64, []byte) error) Option {
 	}
 }
 
-func RequestEach(each ...func(context.Context, *http.Request) error) Option {
-	return func(o *Options) {
-		o.OnRequest = append(o.OnRequest, each...)
-	}
-}
-
-func ResponseEach(each ...func(context.Context, *http.Response) error) Option {
-	return func(o *Options) {
-		o.OnResponse = append(o.OnResponse, each...)
-	}
-}
-
 // Host set net/http.Request.Host.
 // 在客户端，请求的Host字段（可选地）用来重写请求的Host头。 如过该字段为""，Request.Write方法会使用URL字段的Host。
 func Host(host string) Option {
 	return func(o *Options) {
-		o.RoundTripFunc = append(o.RoundTripFunc, func(fn HttpRoundTripFunc) HttpRoundTripFunc {
-			return func(req *http.Request) (*http.Response, error) {
-				req.Host = host
-				req.Header.Set("Host", host)
-				return fn.RoundTrip(req)
-			}
+		o.HttpRoundTripper = append(o.HttpRoundTripper, func(next http.RoundTripper) http.RoundTripper {
+			return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				r.Host = host
+				r.Header.Set("Host", host)
+				return next.RoundTrip(r)
+			})
 		})
 	}
 }
@@ -266,9 +252,11 @@ func Proxy(addr string) Option {
 }
 
 // Setup is used for client middleware
-func Setup(fn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
+func Setup(fn ...func(tripper http.RoundTripper) http.RoundTripper) Option {
 	return func(o *Options) {
-		o.RoundTripFunc = append(o.RoundTripFunc, fn...)
+		for _, f := range fn {
+			o.HttpRoundTripper = append([]func(http.RoundTripper) http.RoundTripper{f}, o.HttpRoundTripper...)
+		}
 	}
 }
 
@@ -276,28 +264,21 @@ func Setup(fn ...func(HttpRoundTripFunc) HttpRoundTripFunc) Option {
 func Use(fn ...func(http.Handler) http.Handler) Option {
 	return func(o *Options) {
 		for _, f := range fn {
-			o.HttpHandler = append(o.HttpHandler, f)
+			o.HttpHandler = append([]func(http.Handler) http.Handler{f}, o.HttpHandler...)
 		}
 	}
 }
 
-// RoundTripFunc set default `*http.Transport` by customer define.
-func RoundTripFunc(fn HttpRoundTripFunc) Option {
+// RoundTripper set default `*http.Transport` by customer define.
+func RoundTripper(tr http.RoundTripper) Option {
 	return func(o *Options) {
-		o.Transport = fn
+		o.Transport = tr
 	}
 }
 
 // Logf print log
 func Logf(f func(ctx context.Context, stat *Stat)) Option {
 	return func(o *Options) {
-		o.RoundTripFunc = append(o.RoundTripFunc, fprintf(f))
-	}
-}
-
-// TraceLv Trace
-func TraceLv(v int, max ...int) Option {
-	return func(o *Options) {
-		o.RoundTripFunc = append(o.RoundTripFunc, verbose(v, max...))
+		o.HttpRoundTripper = append(o.HttpRoundTripper, fprintf(f))
 	}
 }
