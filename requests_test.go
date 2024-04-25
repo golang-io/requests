@@ -60,17 +60,19 @@ func Test_PostBody(t *testing.T) {
 	resp, err := sess.DoRequest(context.Background(),
 		Method("POST"),
 		URL("http://httpbin.org/post"),
-		Params(map[string]any{
+		Params(map[string]string{
 			"a": "b/c",
-			"c": 3,
-			"d": []int{1, 2, 3},
+			"c": "3",
+			"d": "ddd",
 		}),
+		Param("e", "ea", "es"),
+
 		Body(`{"body":"QWER"}`),
 		Header("hello", "world"),
 		//TraceLv(9),
-		//Logf(func(ctx context.Context, stat Stat) {
-		//	fmt.Println(stat)
-		//}),
+		Logf(func(ctx context.Context, stat *Stat) {
+			t.Logf("%v", stat.String())
+		}),
 	)
 	if err != nil {
 		t.Logf("%v", err)
@@ -89,11 +91,13 @@ func Test_FormPost(t *testing.T) {
 		Method("POST"),
 		URL("http://httpbin.org/post"),
 		Form(url.Values{"name": {"12.com"}}),
-		Params(map[string]any{
+		Params(map[string]string{
 			"a": "b/c",
-			"c": 3,
-			"d": []int{1, 2, 3},
+			"c": "cc",
+			"d": "dddd",
 		}),
+		Param("e", "ea", "es"),
+
 		//TraceLv(9),
 	)
 	if err != nil {
@@ -111,7 +115,7 @@ func Test_Race(t *testing.T) {
 	sess := New(URL("http://httpbin.org/post")) //, Auth("user", "123456"))
 	for i := 0; i < 10; i++ {
 		go func() {
-			_, _ = sess.DoRequest(ctx, MethodPost, Body(`{"a":"b"}`), Params(map[string]any{"1": "2/2"})) // nolint: errcheck
+			_, _ = sess.DoRequest(ctx, MethodPost, Body(`{"a":"b"}`), Params(map[string]string{"1": "2/2"})) // nolint: errcheck
 		}()
 	}
 	time.Sleep(3 * time.Second)

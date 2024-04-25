@@ -5,14 +5,13 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"os"
 	"time"
 )
 
 // Response wrap std response
 type Response struct {
-	*http.Response
 	*http.Request
+	*http.Response
 	StartAt time.Time
 	Cost    time.Duration
 	Content *bytes.Buffer
@@ -36,26 +35,9 @@ func (resp *Response) Error() string {
 	return resp.Err.Error()
 }
 
-// Text parse to string
-func (resp *Response) Text() string {
-	return resp.Content.String()
-}
-
-// Download parse response to a file
-func (resp *Response) Download(name string) (int64, error) {
-	f, err := os.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-	if err != nil {
-		return 0, err
-	}
-	defer func(f *os.File) {
-		_ = f.Close()
-	}(f)
-	return io.Copy(f, resp.Content)
-}
-
 // Stat stat
 func (resp *Response) Stat() *Stat {
-	return StatLoad(resp)
+	return responseLoad(resp)
 }
 
 // streamRead xx

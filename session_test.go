@@ -1,8 +1,9 @@
-package requests
+package requests_test
 
 import (
 	"context"
 	"fmt"
+	"github.com/golang-io/requests"
 	"io"
 	"net"
 	"net/http"
@@ -36,7 +37,12 @@ func TestSession_Do(t *testing.T) {
 		s.Serve(l)
 	}()
 
-	sess := New(URL(sock))
-	sess.DoRequest(context.Background(), URL("http://path?k=v"), Body("12345"), MethodPost, Logf(LogS))
+	sess := requests.New(requests.URL(sock))
+	sess.DoRequest(context.Background(),
+		requests.URL("http://path?k=v"),
+		requests.Body("12345"), requests.MethodPost,
+		requests.Logf(func(ctx context.Context, stat *requests.Stat) {
+			_, _ = fmt.Printf("%s\n", stat)
+		}))
 
 }

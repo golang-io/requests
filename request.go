@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -53,18 +52,11 @@ func NewRequestWithContext(ctx context.Context, options Options) (*http.Request,
 		r.URL.Path += p
 	}
 
-	for k, v := range options.Params {
-		if r.URL.RawQuery != "" {
-			r.URL.RawQuery += "&"
-		}
-		r.URL.RawQuery += k + "=" + url.QueryEscape(fmt.Sprintf("%v", v))
-	}
+	r.URL.RawQuery = options.RawQuery.Encode()
 
 	r.Header = options.Header
-
 	for _, cookie := range options.Cookies {
 		r.AddCookie(&cookie)
 	}
-
 	return r, nil
 }

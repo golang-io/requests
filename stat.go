@@ -15,9 +15,9 @@ type Stat struct {
 	Cost      int64  `json:"Cost"`
 
 	Request struct {
-		// Remote is remote addr in server side,
+		// RemoteAddr is remote addr in server side,
 		// For client requests, it is unused.
-		Remote string `json:"Remote"`
+		RemoteAddr string `json:"RemoteAddr"`
 
 		// URL is Request.URL
 		// For client requests, is request addr. contains schema://ip:port/path/xx
@@ -46,8 +46,8 @@ func (stat *Stat) String() string {
 	return string(b)
 }
 
-// StatLoad stat.
-func StatLoad(resp *Response) *Stat {
+// statLoad stat.
+func responseLoad(resp *Response) *Stat {
 	stat := &Stat{
 		StartAt: resp.StartAt.Format(dateTime),
 		Cost:    resp.Cost.Milliseconds(),
@@ -55,7 +55,7 @@ func StatLoad(resp *Response) *Stat {
 	if resp.Response != nil {
 		var err error
 		if resp.Content == nil || resp.Content.Len() == 0 {
-			if resp.Content, err = ParseBody(resp.Response.Body); err != nil {
+			if resp.Content, resp.Response.Body, err = CopyBody(resp.Response.Body); err != nil {
 				stat.Err += fmt.Sprintf("read response: %s", err)
 				return stat
 			}

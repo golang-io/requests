@@ -2,8 +2,6 @@ package requests
 
 import (
 	"bytes"
-	"context"
-	"fmt"
 	"io"
 	"net/http"
 )
@@ -42,20 +40,4 @@ func CopyBody(b io.ReadCloser) (*bytes.Buffer, io.ReadCloser, error) {
 		return &buf, b, err
 	}
 	return &buf, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
-}
-
-// Log print
-func Log(format string, v ...any) {
-	_, _ = fmt.Printf(format+"\n", v...)
-}
-
-// LogS supply default handle Stat, print to stdout.
-func LogS(_ context.Context, stat *Stat) {
-	Log("%s\n", stat)
-}
-
-// StreamS supply default handle Stream, print raw msg in stream to stdout.
-func StreamS(i int64, raw []byte) error {
-	_, err := fmt.Printf("i=%d, raw=%s\n", i, raw)
-	return err
 }

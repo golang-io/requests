@@ -10,13 +10,9 @@ import (
 	"time"
 )
 
-var STEP2 = func(next http.Handler) http.Handler {
-	fmt.Println("STEP2 init")
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("STEP2 start")
-		next.ServeHTTP(w, r)
-		fmt.Println("STEP2 end")
-	})
+// LogS supply default handle Stat, print to stdout.
+func LogS(_ context.Context, stat *requests.Stat) {
+	_, _ = fmt.Printf("%s\n", stat)
 }
 
 func Test_Use(t *testing.T) {
@@ -63,8 +59,8 @@ func Test_Use(t *testing.T) {
 	}()
 	time.Sleep(1 * time.Second)
 	sess := requests.New(requests.URL("http://127.0.0.1:9099"))
-	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(requests.LogS), requests.Method("OPTIONS"))
-	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(requests.LogS), requests.Method("GET"))
+	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(LogS), requests.Method("OPTIONS"))
+	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(LogS), requests.Method("GET"))
 	cancel()
 	time.Sleep(3 * time.Second)
 	//sess.DoRequest(context.Background(), Path("/ping"), Logf(LogS))

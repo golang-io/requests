@@ -17,24 +17,21 @@ type Options struct {
 	Method    string
 	URL       string
 	Path      []string
-	Params    map[string]any
+	RawQuery  url.Values
 	body      any
 	Header    http.Header
 	Cookies   []http.Cookie
 	Timeout   time.Duration
 	MaxConns  int
-	TraceLv   int
-	mLimit    int
 	Verify    bool
 	Stream    func(int64, []byte) error
 	Transport http.RoundTripper
 
 	HttpRoundTripper []func(http.RoundTripper) http.RoundTripper
+	HttpHandler      []func(http.Handler) http.Handler
 
-	// HttpHandler is only used by server mode
-	HttpHandler []func(http.Handler) http.Handler
-	certFile    string
-	keyFile     string
+	certFile string
+	keyFile  string
 
 	// client session used
 	LocalAddr net.Addr
@@ -48,12 +45,11 @@ type Option func(*Options)
 func newOptions(opts []Option, extends ...Option) Options {
 	opt := Options{
 		Method:   "GET",
-		Params:   make(map[string]any),
+		RawQuery: make(url.Values),
 		Header:   make(http.Header),
 		Timeout:  30 * time.Second,
 		MaxConns: 100,
 		Proxy:    http.ProxyFromEnvironment,
-		mLimit:   1024,
 	}
 	for _, o := range opts {
 		o(&opt)
@@ -70,7 +66,8 @@ var (
 	MethodPost = Method("POST")
 )
 
-func CertAndKey(cert, key string) Option {
+// CertKey is cert and key file.
+func CertKey(cert, key string) Option {
 	return func(o *Options) {
 		o.certFile, o.keyFile = cert, key
 	}
@@ -109,18 +106,20 @@ func Path(path string) Option {
 }
 
 // Params add query args
-func Params(query map[string]any) Option {
+func Params(query map[string]string) Option {
 	return func(o *Options) {
 		for k, v := range query {
-			o.Params[k] = v
+			o.RawQuery.Add(k, v)
 		}
 	}
 }
 
 // Param params
-func Param(k string, v any) Option {
+func Param(k string, v ...string) Option {
 	return func(o *Options) {
-		o.Params[k] = v
+		for _, x := range v {
+			o.RawQuery.Add(k, x)
+		}
 	}
 }
 
@@ -192,8 +191,8 @@ func Cookies(cookies ...http.Cookie) Option {
 }
 
 // BasicAuth base auth
-func BasicAuth(user, pass string) Option {
-	return Header("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(user+":"+pass)))
+func BasicAuth(username, password string) Option {
+	return Header("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(username+":"+password)))
 
 }
 

@@ -37,7 +37,7 @@ func Head(url string) (resp *http.Response, err error) {
 
 // PostForm send post request,  content-type = application/x-www-form-urlencoded
 func PostForm(url string, data url.Values) (*http.Response, error) {
-	return s.Do(context.Background(), MethodPost, URL(url), Header("Content-Type", "application/x-www-form-urlencoded"),
+	return s.Do(context.TODO(), MethodPost, URL(url), Header("Content-Type", "application/x-www-form-urlencoded"),
 		Body(strings.NewReader(data.Encode())),
 	)
 }

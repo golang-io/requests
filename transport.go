@@ -29,7 +29,7 @@ func fprintf(f func(ctx context.Context, stat *Stat)) func(http.RoundTripper) ht
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			resp.Request = r
 			defer func() {
-				f(r.Context(), StatLoad(resp))
+				f(r.Context(), resp.Stat())
 			}()
 			resp.Response, resp.Err = next.RoundTrip(r)
 			return resp.Response, resp.Err

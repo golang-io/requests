@@ -9,6 +9,7 @@ import (
 // ResponseWriter wrap `http.ResponseWriter` interface.
 type ResponseWriter struct {
 	http.ResponseWriter
+
 	wroteHeader   bool
 	StatusCode    int
 	ContentLength int64
