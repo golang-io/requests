@@ -14,7 +14,7 @@ import (
 )
 
 func Test_Basic(t *testing.T) {
-	resp, err := Get("http://127.0.0.1:12345/get")
+	resp, err := Get("http://httpbin.org/get")
 	t.Logf("%#v, %v", resp, err)
 	//resp, _ = Post("http://httpbin.org/post", "application/json", strings.NewReader(`{"a": "b"}`))
 	//t.Log(resp.Text())
