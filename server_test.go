@@ -30,7 +30,7 @@ func Test_Use(t *testing.T) {
 		}
 	}
 
-	r := requests.NewServeMux(requests.URL("0.0.0.0:9099"),
+	r := requests.NewServeMux(
 		requests.Use(use("step1"), use("step2")),
 	)
 
@@ -48,14 +48,17 @@ func Test_Use(t *testing.T) {
 			})
 		}),
 	)
-
-	r.OnShutdown(func(s *http.Server) {
-		t.Logf("http %s onshutdown...", s.Addr)
-	})
 	ctx, cancel := context.WithCancel(context.Background())
 
+	s := requests.NewServer(ctx, r, requests.URL(":9099"))
+	s.OnShutdown(func(s *http.Server) {
+		t.Logf("http: %s shutdown...", s.Addr)
+	})
+
 	go func() {
-		requests.ListenAndServe(ctx, r)
+		if err := s.ListenAndServe(); err != nil {
+			t.Errorf("%v", err)
+		}
 	}()
 	time.Sleep(1 * time.Second)
 	sess := requests.New(requests.URL("http://127.0.0.1:9099"))

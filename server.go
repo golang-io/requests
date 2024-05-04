@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"net/url"
 	"strings"
 )
 
@@ -91,30 +92,16 @@ func (node *Node) print(m int) {
 
 // ServeMux implement ServeHTTP interface.
 type ServeMux struct {
-	opts       []Option
-	onStartup  func(s *http.Server)
-	onShutdown func(s *http.Server)
-	root       *Node
+	opts []Option
+	root *Node
 }
 
 // NewServeMux new router.
 func NewServeMux(opts ...Option) *ServeMux {
 	return &ServeMux{
-		opts:       opts,
-		onStartup:  func(s *http.Server) {},
-		onShutdown: func(s *http.Server) {},
-		root:       NewNode("/", http.NotFoundHandler()),
+		opts: opts,
+		root: NewNode("/", http.NotFoundHandler()),
 	}
-}
-
-// OnStartup do something before serve startup
-func (mux *ServeMux) OnStartup(f func(s *http.Server)) {
-	mux.onStartup = f
-}
-
-// OnShutdown do something after serve shutdown
-func (mux *ServeMux) OnShutdown(f func(s *http.Server)) {
-	mux.onShutdown = f
 }
 
 // Route set pattern path to handle
@@ -153,6 +140,50 @@ func (mux *ServeMux) Pprof() {
 	mux.Route("/debug/pprof/trace", pprof.Trace)
 }
 
+type Server struct {
+	options Options
+	*url.URL
+	server *http.Server
+
+	onStartup  func(*http.Server)
+	onShutdown func(*http.Server)
+}
+
+func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
+	mux, _ := h.(*ServeMux)
+
+	s := &Server{
+		options:    newOptions(mux.opts, opts...),
+		server:     &http.Server{Handler: h},
+		onStartup:  func(*http.Server) {},
+		onShutdown: func(*http.Server) {},
+	}
+
+	if !strings.Contains(s.options.URL, "http") {
+		s.options.URL = "http://" + s.options.URL
+	}
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			if err := s.server.Shutdown(ctx); err != nil {
+				panic(err)
+			}
+		}
+	}()
+	return s
+}
+
+// OnStartup do something before serve startup
+func (s *Server) OnStartup(f func(s *http.Server)) {
+	s.onStartup = f
+}
+
+// OnShutdown do something after serve shutdown
+func (s *Server) OnShutdown(f func(s *http.Server)) {
+	s.onShutdown = f
+}
+
 // ListenAndServe listens on the TCP network address srv.Addr and then
 // calls [Serve] or [ServeTLS] to handle requests on incoming (TLS) connections.
 // Accepted connections are configured to enable TCP keep-alives.
@@ -168,24 +199,28 @@ func (mux *ServeMux) Pprof() {
 //
 // ListenAndServe(TLS) always returns a non-nil error. After [Server.Shutdown] or
 // [Server.Close], the returned error is [ErrServerClosed].
-func ListenAndServe(ctx context.Context, h http.Handler, opts ...Option) error {
-	mux, _ := h.(*ServeMux)
-	options := newOptions(mux.opts, opts...)
-	s := &http.Server{Addr: options.URL, Handler: h}
-	s.RegisterOnShutdown(func() { mux.onShutdown(s) })
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			if err := s.Shutdown(ctx); err != nil {
-				panic(err)
-			}
-		}
-	}()
-
-	mux.onStartup(s)
-	if options.certFile == "" || options.keyFile == "" {
-		return s.ListenAndServe()
+func (s *Server) ListenAndServe() (err error) {
+	if s.URL, err = url.Parse(s.options.URL); err != nil {
+		return err
 	}
-	return s.ListenAndServeTLS(options.certFile, options.keyFile)
+	s.server.Addr = s.URL.Host
+	s.server.RegisterOnShutdown(func() { s.onShutdown(s.server) })
+
+	s.onStartup(s.server)
+	if s.options.certFile == "" || s.options.keyFile == "" {
+		return s.server.ListenAndServe()
+	}
+	return s.server.ListenAndServeTLS(s.options.certFile, s.options.keyFile)
+}
+
+// ListenAndServe listens on the TCP network address addr and then calls
+// [Serve] with handler to handle requests on incoming connections.
+// Accepted connections are configured to enable TCP keep-alives.
+//
+// The handler is typically nil, in which case [DefaultServeMux] is used.
+//
+// ListenAndServe always returns a non-nil error.
+func ListenAndServe(ctx context.Context, h http.Handler, opts ...Option) error {
+	s := NewServer(ctx, h, opts...)
+	return s.ListenAndServe()
 }
