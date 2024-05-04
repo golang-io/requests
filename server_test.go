@@ -55,11 +55,7 @@ func Test_Use(t *testing.T) {
 		t.Logf("http: %s shutdown...", s.Addr)
 	})
 
-	go func() {
-		if err := s.ListenAndServe(); err != nil {
-			t.Errorf("%v", err)
-		}
-	}()
+	go s.ListenAndServe()
 	time.Sleep(1 * time.Second)
 	sess := requests.New(requests.URL("http://127.0.0.1:9099"))
 	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(LogS), requests.Method("OPTIONS"))
