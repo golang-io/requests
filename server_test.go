@@ -54,7 +54,7 @@ func Test_Use(t *testing.T) {
 	s.OnShutdown(func(s *http.Server) {
 		t.Logf("http: %s shutdown...", s.Addr)
 	})
-
+	r.Pprof()
 	go s.ListenAndServe()
 	time.Sleep(1 * time.Second)
 	sess := requests.New(requests.URL("http://127.0.0.1:9099"))

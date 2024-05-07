@@ -110,6 +110,11 @@ func (mux *ServeMux) Route(path string, h http.HandlerFunc, opts ...Option) {
 	mux.root.Add(path, h, opts...)
 }
 
+// Redirect set redirect path to handle
+func (mux *ServeMux) Redirect(source, target string) {
+	mux.Route(source, http.RedirectHandler(target, http.StatusMovedPermanently).ServeHTTP)
+}
+
 // Use can set middleware which compatible with net/http.ServeMux.
 func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 	mux.opts = append(mux.opts, Use(fn...))
@@ -133,11 +138,13 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Pprof debug
 func (mux *ServeMux) Pprof() {
-	mux.Route("/debug/pprof", pprof.Index)
+	mux.Route("/debug/pprof/", pprof.Index)
 	mux.Route("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.Route("/debug/pprof/profile", pprof.Profile)
 	mux.Route("/debug/pprof/symbol", pprof.Symbol)
 	mux.Route("/debug/pprof/trace", pprof.Trace)
+	mux.Redirect("/debug/pprof", "/debug/pprof/")
+
 }
 
 type Server struct {
