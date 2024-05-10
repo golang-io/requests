@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"net/url"
-	"reflect"
-	"runtime"
 	"strings"
 )
 
@@ -86,8 +84,7 @@ func (node *Node) Print() {
 
 func (node *Node) print(m int) {
 	paths := node.paths()
-	name := runtime.FuncForPC(reflect.ValueOf(node.handler).Pointer()).Name()
-	fmt.Printf("%spath=%s, handler=%v, next=%#v\n", strings.Repeat("    ", m), node.path, name, paths)
+	fmt.Printf("%spath=%s, handler=%v, next=%#v\n", strings.Repeat("    ", m), node.path, node.handler, paths)
 	for _, p := range paths {
 		node.next[p].print(m + 1)
 	}
