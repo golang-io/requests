@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"net/url"
+	"reflect"
+	"runtime"
 	"strings"
 )
 
@@ -84,7 +86,8 @@ func (node *Node) Print() {
 
 func (node *Node) print(m int) {
 	paths := node.paths()
-	fmt.Printf("%spath=%s, handler=%v, next=%#v\n", strings.Repeat("\t", m), node.path, node.handler, paths)
+	name := runtime.FuncForPC(reflect.ValueOf(node.handler).Pointer()).Name()
+	fmt.Printf("%spath=%s, handler=%v, next=%#v\n", strings.Repeat("    ", m), node.path, name, paths)
 	for _, p := range paths {
 		node.next[p].print(m + 1)
 	}
@@ -138,13 +141,11 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Pprof debug
 func (mux *ServeMux) Pprof() {
-	mux.Route("/debug/pprof/", pprof.Index)
+	mux.Route("/debug/pprof", pprof.Index)
 	mux.Route("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.Route("/debug/pprof/profile", pprof.Profile)
 	mux.Route("/debug/pprof/symbol", pprof.Symbol)
 	mux.Route("/debug/pprof/trace", pprof.Trace)
-	mux.Redirect("/debug/pprof", "/debug/pprof/")
-
 }
 
 type Server struct {

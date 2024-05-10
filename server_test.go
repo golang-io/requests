@@ -15,6 +15,15 @@ func LogS(_ context.Context, stat *requests.Stat) {
 	_, _ = fmt.Printf("%s\n", stat)
 }
 
+func Test_Server(t *testing.T) {
+	handler := requests.NewServeMux()
+	handler.Pprof()
+	s := requests.NewServer(context.Background(), handler, requests.URL("http://127.0.0.1:6066"))
+	go s.ListenAndServe()
+
+	http.ListenAndServe("0.0.0.0:8088", nil)
+}
+
 func Test_Use(t *testing.T) {
 
 	var use = func(name string) func(next http.Handler) http.Handler {
