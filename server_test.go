@@ -20,8 +20,6 @@ func Test_Server(t *testing.T) {
 	handler.Pprof()
 	s := requests.NewServer(context.Background(), handler, requests.URL("http://127.0.0.1:6066"))
 	go s.ListenAndServe()
-
-	http.ListenAndServe("0.0.0.0:8088", nil)
 }
 
 func Test_Use(t *testing.T) {
