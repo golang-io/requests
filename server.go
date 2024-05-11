@@ -147,26 +147,27 @@ func (mux *ServeMux) Pprof() {
 
 type Server struct {
 	options Options
-	*url.URL
-	server *http.Server
+	server  *http.Server
 
 	onStartup  func(*http.Server)
 	onShutdown func(*http.Server)
 }
 
 func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
-	mux, _ := h.(*ServeMux)
-
-	s := &Server{
-		options:    newOptions(mux.opts, opts...),
-		server:     &http.Server{Handler: h},
-		onStartup:  func(*http.Server) {},
-		onShutdown: func(*http.Server) {},
+	s := &Server{server: &http.Server{}, onStartup: func(*http.Server) {}, onShutdown: func(*http.Server) {}}
+	if mux, ok := h.(*ServeMux); ok {
+		s.options = newOptions(mux.opts, opts...)
+	} else {
+		s.options = newOptions(opts)
 	}
 
-	if !strings.Contains(s.options.URL, "http") {
-		s.options.URL = "http://" + s.options.URL
+	u, err := url.Parse(s.options.URL)
+	if err != nil {
+		panic(err)
 	}
+
+	s.server.Addr = u.Host
+	s.server.RegisterOnShutdown(func() { s.onShutdown(s.server) })
 
 	go func() {
 		select {
@@ -205,11 +206,6 @@ func (s *Server) OnShutdown(f func(s *http.Server)) {
 // ListenAndServe(TLS) always returns a non-nil error. After [Server.Shutdown] or
 // [Server.Close], the returned error is [ErrServerClosed].
 func (s *Server) ListenAndServe() (err error) {
-	if s.URL, err = url.Parse(s.options.URL); err != nil {
-		return err
-	}
-	s.server.Addr = s.URL.Host
-	s.server.RegisterOnShutdown(func() { s.onShutdown(s.server) })
 
 	s.onStartup(s.server)
 	if s.options.certFile == "" || s.options.keyFile == "" {

@@ -14,21 +14,23 @@ import (
 
 // Options request
 type Options struct {
-	Method    string
-	URL       string
-	Path      []string
-	RawQuery  url.Values
-	body      any
-	Header    http.Header
-	Cookies   []http.Cookie
-	Timeout   time.Duration
-	MaxConns  int
-	Verify    bool
-	Stream    func(int64, []byte) error
-	Transport http.RoundTripper
+	Method   string
+	URL      string
+	Path     []string
+	RawQuery url.Values
+	body     any
+	Header   http.Header
+	Cookies  []http.Cookie
+	Timeout  time.Duration
+	MaxConns int
+	Verify   bool
+	Stream   func(int64, []byte) error
 
+	Transport        http.RoundTripper
 	HttpRoundTripper []func(http.RoundTripper) http.RoundTripper
-	HttpHandler      []func(http.Handler) http.Handler
+
+	Handler     http.Handler
+	HttpHandler []func(http.Handler) http.Handler
 
 	certFile string
 	keyFile  string

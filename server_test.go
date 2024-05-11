@@ -19,6 +19,7 @@ func Test_Server(t *testing.T) {
 	handler := requests.NewServeMux()
 	handler.Pprof()
 	s := requests.NewServer(context.Background(), handler, requests.URL("http://127.0.0.1:6066"))
+	s.OnStartup(func(s *http.Server) { fmt.Println("http serve") })
 	go s.ListenAndServe()
 }
 
