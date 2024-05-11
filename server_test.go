@@ -58,7 +58,7 @@ func Test_Use(t *testing.T) {
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := requests.NewServer(ctx, r, requests.URL(":9099"))
+	s := requests.NewServer(ctx, r, requests.URL("http://0.0.0.0:9099"))
 	s.OnShutdown(func(s *http.Server) {
 		t.Logf("http: %s shutdown...", s.Addr)
 	})
