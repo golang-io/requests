@@ -136,7 +136,7 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
-// Pprof debug
+// Pprof debug, 必须使用这个路径访问：/debug/pprof/
 func (mux *ServeMux) Pprof() {
 	mux.Route("/debug/pprof", pprof.Index)
 	mux.Route("/debug/pprof/cmdline", pprof.Cmdline)
@@ -154,7 +154,7 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
-	s := &Server{server: &http.Server{}, onStartup: func(*http.Server) {}, onShutdown: func(*http.Server) {}}
+	s := &Server{server: &http.Server{Handler: h}, onStartup: func(*http.Server) {}, onShutdown: func(*http.Server) {}}
 	if mux, ok := h.(*ServeMux); ok {
 		s.options = newOptions(mux.opts, opts...)
 	} else {
