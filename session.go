@@ -118,6 +118,10 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 	}
 
 	resp.Response, resp.Err = s.RoundTripper(opts...).RoundTrip(resp.Request)
+	if resp.Err != nil {
+		return resp, resp.Err
+	}
+	
 	if resp.Response == nil {
 		resp.Response = &http.Response{Body: http.NoBody}
 	} else if resp.Response.Body == nil {
