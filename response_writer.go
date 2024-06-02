@@ -9,10 +9,9 @@ import (
 // ResponseWriter wrap `http.ResponseWriter` interface.
 type ResponseWriter struct {
 	http.ResponseWriter
-
-	wroteHeader   bool
-	StatusCode    int
-	ContentLength int64
+	wroteHeader bool
+	StatusCode  int
+	Content     []byte
 }
 
 func (w *ResponseWriter) WriteHeader(statusCode int) {
@@ -27,7 +26,7 @@ func (w *ResponseWriter) WriteHeader(statusCode int) {
 func (w *ResponseWriter) Write(buf []byte) (int, error) {
 	w.WriteHeader(http.StatusOK)
 	n, err := w.ResponseWriter.Write(buf)
-	w.ContentLength += int64(n)
+	w.Content = append(w.Content, buf...)
 	return n, err
 }
 

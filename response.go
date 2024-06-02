@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Response wrap std response
+// Response wrap `http.Response` struct.
 type Response struct {
 	*http.Request
 	*http.Response
