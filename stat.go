@@ -3,6 +3,7 @@ package requests
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 const RequestId = "Request-Id"
@@ -50,7 +51,7 @@ func (stat *Stat) String() string {
 func responseLoad(resp *Response) *Stat {
 	stat := &Stat{
 		StartAt: resp.StartAt.Format(dateTime),
-		Cost:    resp.Cost.Milliseconds(),
+		Cost:    time.Since(resp.StartAt).Milliseconds(),
 	}
 	if resp.Response != nil {
 		var err error
