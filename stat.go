@@ -71,6 +71,9 @@ func responseLoad(resp *Response) *Stat {
 			stat.Response.Header[k] = v[0]
 		}
 		stat.Response.ContentLength = resp.Response.ContentLength
+		if stat.Response.ContentLength == -1 && resp.Content.Len() != 0 {
+			stat.Response.ContentLength = int64(resp.Content.Len())
+		}
 		stat.Response.StatusCode = resp.StatusCode
 	}
 	if resp.Request != nil {
