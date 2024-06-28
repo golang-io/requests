@@ -77,6 +77,11 @@ func New(opts ...Option) *Session {
 	return s
 }
 
+// HTTPClient returns the http.Client that is configured to be used for HTTP requests.
+func (s *Session) HTTPClient() *http.Client {
+	return s.client
+}
+
 // RoundTrip implements the [RoundTripper] interface.
 // Like the `http.RoundTripper` interface, the error types returned by RoundTrip are unspecified.
 func (s *Session) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -121,7 +126,7 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 	if resp.Err != nil {
 		return resp, resp.Err
 	}
-	
+
 	if resp.Response == nil {
 		resp.Response = &http.Response{Body: http.NoBody}
 	} else if resp.Response.Body == nil {
