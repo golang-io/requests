@@ -1,8 +1,10 @@
 package requests
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -45,6 +47,14 @@ type Stat struct {
 func (stat *Stat) String() string {
 	b, _ := json.Marshal(stat)
 	return string(b)
+}
+
+// PrintStat is used for server side
+func (stat *Stat) Print() string {
+	return fmt.Sprintf("%s %s \"%s -> %s%s\" - %d %dB in %dms",
+		stat.StartAt, stat.Request.Method,
+		stat.Request.RemoteAddr, stat.Response.URL, stat.Request.URL,
+		stat.Response.StatusCode, stat.Response.ContentLength, stat.Cost)
 }
 
 // statLoad stat.
@@ -112,5 +122,41 @@ func responseLoad(resp *Response) *Stat {
 	if resp.Err != nil {
 		stat.Err = resp.Err.Error()
 	}
+	return stat
+}
+
+func serveLoad(w *ResponseWriter, r *http.Request, start time.Time, buf *bytes.Buffer) *Stat {
+	stat := &Stat{
+		StartAt: start.Format("2006-01-02 15:04:05.000"),
+		Cost:    time.Since(start).Milliseconds(),
+	}
+	stat.Request.RemoteAddr = r.RemoteAddr
+	stat.Request.Method = r.Method
+	stat.Request.Header = make(map[string]string)
+	for k, v := range r.Header {
+		stat.Request.Header[k] = v[0]
+	}
+	stat.Request.URL = r.URL.String()
+
+	if buf != nil {
+		m := make(map[string]any)
+		if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
+			stat.Request.Body = buf.String()
+		} else {
+			stat.Request.Body = m
+		}
+	}
+	scheme := "http://"
+	if r.TLS != nil {
+		scheme = "https://"
+	}
+	stat.Response.URL = scheme + r.Host
+	stat.Response.StatusCode = w.StatusCode
+	stat.Response.ContentLength = int64(len(w.Content))
+	stat.Response.Header = make(map[string]string)
+	for k, v := range r.Header {
+		stat.Response.Header[k] = v[0]
+	}
+	stat.Response.Body = string(w.Content)
 	return stat
 }

@@ -28,7 +28,7 @@ func (fn RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // Stream 和Log不能共用
-func fprintf(f func(ctx context.Context, stat *Stat)) func(http.RoundTripper) http.RoundTripper {
+func printRoundTripper(f func(ctx context.Context, stat *Stat)) func(http.RoundTripper) http.RoundTripper {
 	resp := newResponse()
 	return func(next http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -38,6 +38,21 @@ func fprintf(f func(ctx context.Context, stat *Stat)) func(http.RoundTripper) ht
 			}()
 			resp.Response, resp.Err = next.RoundTrip(r)
 			return resp.Response, resp.Err
+		})
+	}
+}
+
+func printHandler(f func(ctx context.Context, stat *Stat)) func(handler http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			ww := &ResponseWriter{ResponseWriter: w}
+			buf, body, _ := CopyBody(r.Body)
+			r.Body = body
+			defer func() {
+				f(r.Context(), serveLoad(ww, r, start, buf))
+			}()
+			next.ServeHTTP(ww, r)
 		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/golang-io/requests"
 	"io"
+	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -40,6 +41,9 @@ func Test_Use(t *testing.T) {
 
 	r := requests.NewServeMux(
 		requests.Use(use("step1"), use("step2")),
+		requests.Logf(func(ctx context.Context, stat *requests.Stat) {
+			log.Printf("%s", stat.Print())
+		}),
 	)
 
 	r.Route("/echo", func(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +74,7 @@ func Test_Use(t *testing.T) {
 	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(LogS), requests.Method("GET"))
 	//sess.DoRequest(context.Background(), Path("/ping"), Logf(LogS))
 	//sess.DoRequest(context.Background(), Path("/1234"), Logf(LogS))
+	select {}
 
 }
 

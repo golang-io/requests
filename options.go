@@ -280,6 +280,8 @@ func RoundTripper(tr http.RoundTripper) Option {
 // Logf print log
 func Logf(f func(ctx context.Context, stat *Stat)) Option {
 	return func(o *Options) {
-		o.HttpRoundTripper = append(o.HttpRoundTripper, fprintf(f))
+		o.HttpRoundTripper = append(o.HttpRoundTripper, printRoundTripper(f))
+		o.HttpHandler = append(o.HttpHandler, printHandler(f))
+
 	}
 }
