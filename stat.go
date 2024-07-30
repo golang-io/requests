@@ -49,7 +49,7 @@ func (stat *Stat) String() string {
 	return string(b)
 }
 
-// PrintStat is used for server side
+// Print is used for server side
 func (stat *Stat) Print() string {
 	return fmt.Sprintf("%s %s \"%s -> %s%s\" - %d %dB in %dms",
 		stat.StartAt, stat.Request.Method,

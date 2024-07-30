@@ -44,6 +44,11 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 		panic("path is empty")
 	}
 
+	if path == "/" {
+		node.handler = h
+		return
+	}
+
 	current := node
 	for _, p := range strings.Split(path[1:], "/") {
 		if _, ok := current.next[p]; !ok {
@@ -55,8 +60,7 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 
 }
 
-// Find node
-// 按照最长的匹配原则，/a/b/c/会优先返回/a/b/c/,其次返回/a/b/c，再返回/a/b，再返回/a，再返回/
+// Find 按照最长的匹配原则，/a/b/c/会优先返回/a/b/c/,其次返回/a/b/c，再返回/a/b，再返回/a，再返回/
 func (node *Node) Find(path string) *Node {
 	current := node
 	for _, p := range strings.Split(path, "/") {
@@ -145,6 +149,7 @@ func (mux *ServeMux) Pprof() {
 	mux.Route("/debug/pprof/trace", pprof.Trace)
 }
 
+// Server server
 type Server struct {
 	options Options
 	server  *http.Server
@@ -153,6 +158,7 @@ type Server struct {
 	onShutdown func(*http.Server)
 }
 
+// NewServer new server
 func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 	s := &Server{server: &http.Server{Handler: h}, onStartup: func(*http.Server) {}, onShutdown: func(*http.Server) {}}
 	if mux, ok := h.(*ServeMux); ok {
