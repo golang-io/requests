@@ -212,12 +212,14 @@ func Verify(verify bool) Option {
 	}
 }
 
-func LocalAddr(addr net.Addr) Option {
+// LocalAddr local ip
+func LocalAddr(ip net.IP) Option {
 	return func(o *Options) {
-		o.LocalAddr = addr
+		o.LocalAddr = &net.TCPAddr{IP: ip}
 	}
 }
 
+// Stream handle func
 func Stream(stream func(int64, []byte) error) Option {
 	return func(o *Options) {
 		o.Stream = stream

@@ -33,7 +33,7 @@ func Test_Id(t *testing.T) {
 
 }
 
-// go test -v -bench='Benchmark_GenId' -benchmem .
+// go test -v -test.bench='Benchmark_GenId.*' -test.run='KKK.*' -benchmem .
 func Benchmark_GenId(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		GenId()
