@@ -213,9 +213,11 @@ func Verify(verify bool) Option {
 }
 
 // LocalAddr local ip
-func LocalAddr(ip net.IP) Option {
+// for tcp: &net.TCPAddr{IP: ip}
+// for unix: &net.UnixAddr{Net: "unix", Name: "xxx")}
+func LocalAddr(addr net.Addr) Option {
 	return func(o *Options) {
-		o.LocalAddr = &net.TCPAddr{IP: ip}
+		o.LocalAddr = addr
 	}
 }
 

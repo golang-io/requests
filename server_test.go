@@ -60,7 +60,7 @@ func Test_Use(t *testing.T) {
 			})
 		}),
 	)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	s := requests.NewServer(ctx, r, requests.URL("http://0.0.0.0:9099"))
 	s.OnShutdown(func(s *http.Server) {
@@ -74,7 +74,10 @@ func Test_Use(t *testing.T) {
 	_, _ = sess.DoRequest(context.Background(), requests.Path("/echo"), requests.Body("12345"), requests.Logf(LogS), requests.Method("GET"))
 	//sess.DoRequest(context.Background(), Path("/ping"), Logf(LogS))
 	//sess.DoRequest(context.Background(), Path("/1234"), Logf(LogS))
-	select {}
+
+	select {
+	case <-ctx.Done():
+	}
 
 }
 
