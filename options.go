@@ -46,6 +46,7 @@ type Option func(*Options)
 // NewOptions new request
 func newOptions(opts []Option, extends ...Option) Options {
 	opt := Options{
+		URL:      "http://127.0.0.1:80",
 		Method:   "GET",
 		RawQuery: make(url.Values),
 		Header:   make(http.Header),

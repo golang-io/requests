@@ -100,7 +100,7 @@ type ServeMux struct {
 	root *Node
 }
 
-// NewServeMux new router.
+// NewServeMux new router. ServeMux options is only set in this place.
 func NewServeMux(opts ...Option) *ServeMux {
 	return &ServeMux{
 		opts: opts,
@@ -130,10 +130,7 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 // 最后处理中间件`func(next http.Handler) http.Handler`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	current := mux.root.Find(r.URL.Path[1:])
-
-	options := newOptions(mux.opts, current.opts...)
-
-	handler := current.handler
+	handler, options := current.handler, newOptions(mux.opts, current.opts...)
 	for _, h := range options.HttpHandler {
 		handler = h(handler)
 	}
@@ -158,7 +155,7 @@ type Server struct {
 	onShutdown func(*http.Server)
 }
 
-// NewServer new server
+// NewServer new server, opts is not add to ServeMux
 func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 	s := &Server{server: &http.Server{Handler: h}, onStartup: func(*http.Server) {}, onShutdown: func(*http.Server) {}}
 	if mux, ok := h.(*ServeMux); ok {
