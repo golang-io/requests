@@ -108,10 +108,34 @@ func NewServeMux(opts ...Option) *ServeMux {
 	}
 }
 
-// Route set pattern path to handle
+// Print print trie tree struct.
+func (mux *ServeMux) Print() {
+	mux.root.Print()
+}
+
+// HandleFunc set func pattern path to handle
 // path cannot override, so if your path not work, maybe it is already exists!
-func (mux *ServeMux) Route(path string, h http.HandlerFunc, opts ...Option) {
-	mux.root.Add(path, h, opts...)
+func (mux *ServeMux) HandleFunc(path string, f func(http.ResponseWriter, *http.Request), opts ...Option) {
+	mux.root.Add(path, f, opts...)
+}
+
+// Handle set handler pattern path to handler
+func (mux *ServeMux) Handle(path string, h http.Handler, opts ...Option) {
+	mux.root.Add(path, h.ServeHTTP, opts...)
+}
+
+// Route set any pattern path to handle
+func (mux *ServeMux) Route(path string, v any, opts ...Option) {
+	switch h := v.(type) {
+	case http.Handler:
+		mux.Handle(path, h, opts...)
+	case http.HandlerFunc:
+		mux.HandleFunc(path, h, opts...)
+	case func(http.ResponseWriter, *http.Request):
+		mux.HandleFunc(path, h, opts...)
+	default:
+		panic("unknown handler type")
+	}
 }
 
 // Redirect set redirect path to handle

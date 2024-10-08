@@ -16,11 +16,29 @@ func LogS(_ context.Context, stat *requests.Stat) {
 	_, _ = fmt.Printf("%s\n", stat)
 }
 
+type h struct{}
+
+func (h) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("handle ok"))
+}
 func Test_Server(t *testing.T) {
-	handler := requests.NewServeMux()
-	handler.Pprof()
-	s := requests.NewServer(context.Background(), handler, requests.URL("http://127.0.0.1:6066"))
+
+	mux := requests.NewServeMux()
+	mux.Pprof()
+	s := requests.NewServer(context.Background(), mux, requests.URL("http://127.0.0.1:6066"))
 	s.OnStartup(func(s *http.Server) { fmt.Println("http serve") })
+	mux.Handle("/handle", h{})
+	mux.HandleFunc("/handler", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("handler ok"))
+	})
+	mux.Route("/route_handler", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("route_handler ok"))
+	})
+	mux.Route("/route_handle", h{})
+	mux.Route("/route_func", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("route_func ok"))
+	}))
+
 	go s.ListenAndServe()
 }
 
