@@ -45,10 +45,9 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 	}
 
 	if path == "/" {
-		node.handler = h
+		node.handler, node.opts = h, opts
 		return
 	}
-
 	current := node
 	for _, p := range strings.Split(path[1:], "/") {
 		if _, ok := current.next[p]; !ok {
@@ -57,7 +56,6 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 		current = current.next[p]
 	}
 	current.handler, current.opts = h, opts
-
 }
 
 // Find 按照最长的匹配原则，/a/b/c/会优先返回/a/b/c/,其次返回/a/b/c，再返回/a/b，再返回/a，再返回/
@@ -100,7 +98,7 @@ type ServeMux struct {
 	root *Node
 }
 
-// NewServeMux new router. ServeMux options is only set in this place.
+// NewServeMux new router.
 func NewServeMux(opts ...Option) *ServeMux {
 	return &ServeMux{
 		opts: opts,
