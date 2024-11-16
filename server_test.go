@@ -23,11 +23,27 @@ func (h) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 func Test_Server(t *testing.T) {
 
-	mux := requests.NewServeMux()
+	mux := requests.NewServeMux(requests.Logf(func(ctx context.Context, stat *requests.Stat) {
+		fmt.Println("serveMux11111----------")
+	}), requests.Logf(func(ctx context.Context, stat *requests.Stat) {
+		fmt.Println("serveMux222222----------")
+	}),
+	)
 	mux.Pprof()
-	s := requests.NewServer(context.Background(), mux, requests.URL("http://127.0.0.1:6066"))
-	s.OnStartup(func(s *http.Server) { fmt.Println("http serve") })
-	mux.Handle("/handle", h{})
+	s := requests.NewServer(
+		context.Background(),
+		mux,
+		requests.URL("http://127.0.0.1:6066"),
+		requests.Logf(func(ctx context.Context, stat *requests.Stat) {
+			fmt.Println("--------server")
+		}),
+		requests.OnStart(func(s *http.Server) {
+			fmt.Println("OnStart", s.Addr)
+		}),
+	)
+	mux.Handle("/handle", h{}, requests.Logf(func(ctx context.Context, stat *requests.Stat) {
+		fmt.Println("handle------")
+	}))
 	mux.HandleFunc("/handler", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("handler ok"))
 	})
@@ -80,10 +96,9 @@ func Test_Use(t *testing.T) {
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	s := requests.NewServer(ctx, r, requests.URL("http://0.0.0.0:9099"))
-	s.OnShutdown(func(s *http.Server) {
+	s := requests.NewServer(ctx, r, requests.URL("http://0.0.0.0:9099"), requests.OnShutdown(func(s *http.Server) {
 		t.Logf("http: %s shutdown...", s.Addr)
-	})
+	}))
 	r.Pprof()
 	go s.ListenAndServe()
 	time.Sleep(1 * time.Second)
@@ -93,9 +108,7 @@ func Test_Use(t *testing.T) {
 	//sess.DoRequest(context.Background(), Path("/ping"), Logf(LogS))
 	//sess.DoRequest(context.Background(), Path("/1234"), Logf(LogS))
 
-	select {
-	case <-ctx.Done():
-	}
+	time.Sleep(3 * time.Second)
 
 }
 

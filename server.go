@@ -153,6 +153,9 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	current := mux.root.Find(r.URL.Path[1:])
 	handler, options := current.handler, newOptions(mux.opts, current.opts...)
+	if options.Log != nil {
+		options.HttpHandler = append(options.HttpHandler, printHandler(options.Log))
+	}
 	for _, h := range options.HttpHandler {
 		handler = h(handler)
 	}
@@ -172,19 +175,16 @@ func (mux *ServeMux) Pprof() {
 type Server struct {
 	options Options
 	server  *http.Server
-
-	onStartup  func(*http.Server)
-	onShutdown func(*http.Server)
 }
 
 // NewServer new server, opts is not add to ServeMux
 func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
-	s := &Server{server: &http.Server{Handler: h}, onStartup: func(*http.Server) {}, onShutdown: func(*http.Server) {}}
-	if mux, ok := h.(*ServeMux); ok {
-		s.options = newOptions(mux.opts, opts...)
-	} else {
-		s.options = newOptions(opts)
+	s := &Server{server: &http.Server{Handler: h}}
+	mux, ok := h.(*ServeMux)
+	if !ok {
+		mux = NewServeMux()
 	}
+	s.options = newOptions(mux.opts, opts...)
 
 	u, err := url.Parse(s.options.URL)
 	if err != nil {
@@ -192,27 +192,18 @@ func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 	}
 
 	s.server.Addr = u.Host
-	s.server.RegisterOnShutdown(func() { s.onShutdown(s.server) })
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			if err := s.server.Shutdown(ctx); err != nil {
-				panic(err)
-			}
-		}
-	}()
+	s.options.OnStart(s.server)
+	s.server.RegisterOnShutdown(func() { s.options.OnShutdown(s.server) })
+	go s.Shutdown(ctx)
 	return s
 }
 
-// OnStartup do something before serve startup
-func (s *Server) OnStartup(f func(s *http.Server)) {
-	s.onStartup = f
-}
-
-// OnShutdown do something after serve shutdown
-func (s *Server) OnShutdown(f func(s *http.Server)) {
-	s.onShutdown = f
+// Shutdown gracefully shuts down the server without interrupting any active connections.
+func (s *Server) Shutdown(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return s.server.Shutdown(ctx)
+	}
 }
 
 // ListenAndServe listens on the TCP network address srv.Addr and then
@@ -231,8 +222,6 @@ func (s *Server) OnShutdown(f func(s *http.Server)) {
 // ListenAndServe(TLS) always returns a non-nil error. After [Server.Shutdown] or
 // [Server.Close], the returned error is [ErrServerClosed].
 func (s *Server) ListenAndServe() (err error) {
-
-	s.onStartup(s.server)
 	if s.options.certFile == "" || s.options.keyFile == "" {
 		return s.server.ListenAndServe()
 	}

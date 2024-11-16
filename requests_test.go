@@ -48,7 +48,7 @@ func Test_PostBody(t *testing.T) {
 	sess := New(
 		BasicAuth("user", "123456"),
 		Logf(func(context.Context, *Stat) {
-			fmt.Println("session")
+			fmt.Println("111111111")
 
 		}),
 	)
@@ -71,7 +71,8 @@ func Test_PostBody(t *testing.T) {
 		Header("hello", "world"),
 		//TraceLv(9),
 		Logf(func(ctx context.Context, stat *Stat) {
-			t.Logf("%v", stat.String())
+			fmt.Println(22222222)
+			//t.Logf("%v", stat.String())
 		}),
 	)
 	if err != nil {

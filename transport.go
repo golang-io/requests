@@ -123,7 +123,9 @@ func (t *Transport) RoundTripper(opts ...Option) http.RoundTripper {
 		if options.Transport == nil {
 			options.Transport = t.Transport
 		}
-
+		if options.Log != nil {
+			options.HttpRoundTripper = append(options.HttpRoundTripper, printRoundTripper(options.Log))
+		}
 		for _, tr := range options.HttpRoundTripper {
 			options.Transport = tr(options.Transport)
 		}

@@ -25,12 +25,15 @@ type Options struct {
 	MaxConns int
 	Verify   bool
 	Stream   func(int64, []byte) error
+	Log      func(ctx context.Context, stat *Stat)
 
 	Transport        http.RoundTripper
 	HttpRoundTripper []func(http.RoundTripper) http.RoundTripper
 
 	Handler     http.Handler
 	HttpHandler []func(http.Handler) http.Handler
+	OnStart     func(*http.Server)
+	OnShutdown  func(*http.Server)
 
 	certFile string
 	keyFile  string
@@ -53,6 +56,9 @@ func newOptions(opts []Option, extends ...Option) Options {
 		Timeout:  30 * time.Second,
 		MaxConns: 100,
 		Proxy:    http.ProxyFromEnvironment,
+
+		OnStart:    func(*http.Server) {},
+		OnShutdown: func(*http.Server) {},
 	}
 	for _, o := range opts {
 		o(&opt)
@@ -283,10 +289,20 @@ func RoundTripper(tr http.RoundTripper) Option {
 }
 
 // Logf print log
-func Logf(f func(ctx context.Context, stat *Stat)) Option {
+func Logf(f func(context.Context, *Stat)) Option {
 	return func(o *Options) {
-		o.HttpRoundTripper = append(o.HttpRoundTripper, printRoundTripper(f))
-		o.HttpHandler = append(o.HttpHandler, printHandler(f))
+		o.Log = f
+	}
+}
 
+func OnStart(f func(*http.Server)) Option {
+	return func(o *Options) {
+		o.OnStart = f
+	}
+}
+
+func OnShutdown(f func(*http.Server)) Option {
+	return func(o *Options) {
+		o.OnShutdown = f
 	}
 }
