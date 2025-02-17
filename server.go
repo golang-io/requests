@@ -151,7 +151,7 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 // 其次执行RequestEach对`http.Request`进行处理,如果处理失败的话，直接返回400
 // 最后处理中间件`func(next http.Handler) http.Handler`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	current := mux.root.Find(r.URL.Path[1:])
+	current := mux.root.Find(strings.TrimLeft(r.URL.Path, "/"))
 	handler, options := current.handler, newOptions(mux.opts, current.opts...)
 	if options.Log != nil {
 		options.HttpHandler = append(options.HttpHandler, printHandler(options.Log))

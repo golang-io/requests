@@ -32,6 +32,11 @@ func (s *Session) HTTPClient() *http.Client {
 	return s.client
 }
 
+// Transport returns *http.Transport.
+func (s *Session) Transport() *http.Transport {
+	return s.transport.Transport
+}
+
 // RoundTrip implements the [RoundTripper] interface.
 // Like the `http.RoundTripper` interface, the error types returned by RoundTrip are unspecified.
 func (s *Session) RoundTrip(r *http.Request) (*http.Response, error) {

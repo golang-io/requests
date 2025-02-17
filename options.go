@@ -255,6 +255,9 @@ func Host(host string) Option {
 // https://stackoverflow.com/questions/14661511/setting-up-proxy-for-http-client
 func Proxy(addr string) Option {
 	return func(o *Options) {
+		if addr == "" {
+			return
+		}
 		if proxyURL, err := url.Parse(addr); err == nil {
 			o.Proxy = http.ProxyURL(proxyURL)
 		} else {
