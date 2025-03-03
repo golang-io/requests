@@ -39,3 +39,12 @@ func Benchmark_GenId(b *testing.B) {
 		GenId()
 	}
 }
+
+// go test -v -test.bench='Benchmark_GenId.*' -test.run='KKK.*' -benchmem .
+func Benchmark_GenId_Parallel(b *testing.B) {
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			GenId()
+		}
+	})
+}
