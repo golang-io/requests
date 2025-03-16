@@ -61,7 +61,7 @@ func (s *Session) Do(ctx context.Context, opts ...Option) (*http.Response, error
 
 // DoRequest send a request and return a response, and is safely close `resp.Body`.
 func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, error) {
-	options, resp := newOptions(s.opts, opts...), newResponse()
+	options, resp := newOptions(s.opts, opts...), newResponse(nil)
 	resp.Request, resp.Err = NewRequestWithContext(ctx, options)
 	if resp.Err != nil {
 		return resp, resp.Err
@@ -77,15 +77,8 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 	} else if resp.Response.Body == nil {
 		resp.Response.Body = http.NoBody
 	}
-
 	defer resp.Response.Body.Close()
-
-	if options.Stream != nil {
-		_, resp.Err = streamRead(resp.Response.Body, options.Stream)
-		resp.Content = bytes.NewBufferString("[consumed]")
-	} else {
-		_, resp.Err = resp.Content.ReadFrom(resp.Response.Body)
-		resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
-	}
+	_, resp.Err = resp.Content.ReadFrom(resp.Response.Body)
+	resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
 	return resp, resp.Err
 }

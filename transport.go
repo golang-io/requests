@@ -27,21 +27,19 @@ func (fn RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return fn(r)
 }
 
-// Stream 和Log不能共用
+// printRoundTripper print http client request and response.
 func printRoundTripper(f func(ctx context.Context, stat *Stat)) func(http.RoundTripper) http.RoundTripper {
-	resp := newResponse()
 	return func(next http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
-			resp.Request = r
-			defer func() {
-				f(r.Context(), resp.Stat())
-			}()
+			resp := newResponse(r)
 			resp.Response, resp.Err = next.RoundTrip(r)
+			f(r.Context(), resp.Stat())
 			return resp.Response, resp.Err
 		})
 	}
 }
 
+// printHandler print http server request and response.
 func printHandler(f func(ctx context.Context, stat *Stat)) func(handler http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,10 +47,8 @@ func printHandler(f func(ctx context.Context, stat *Stat)) func(handler http.Han
 			ww := &ResponseWriter{ResponseWriter: w}
 			buf, body, _ := CopyBody(r.Body)
 			r.Body = body
-			defer func() {
-				f(r.Context(), serveLoad(ww, r, start, buf))
-			}()
 			next.ServeHTTP(ww, r)
+			f(r.Context(), serveLoad(ww, r, start, buf))
 		})
 	}
 }
@@ -123,11 +119,8 @@ func (t *Transport) RoundTripper(opts ...Option) http.RoundTripper {
 		if options.Transport == nil {
 			options.Transport = t.Transport
 		}
-		if options.Log != nil {
-			options.HttpRoundTripper = append(options.HttpRoundTripper, printRoundTripper(options.Log))
-		}
-		for _, tr := range options.HttpRoundTripper {
-			options.Transport = tr(options.Transport)
+		for i := len(options.HttpRoundTripper) - 1; i >= 0; i-- {
+			options.Transport = options.HttpRoundTripper[i](options.Transport)
 		}
 		return options.Transport.RoundTrip(r)
 	})

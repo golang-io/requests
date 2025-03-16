@@ -2,7 +2,11 @@ package requests
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -30,4 +34,17 @@ func CopyBody(b io.ReadCloser) (*bytes.Buffer, io.ReadCloser, error) {
 		return nil, nil, err
 	}
 	return buf, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// LogS supply default handle Stat, print to stdout.
+func LogS(_ context.Context, stat *Stat) {
+	if stat.Response.URL == "" {
+		_, _ = fmt.Printf("%s\n", stat)
+		return
+	}
+	if b, err := json.Marshal(stat.Request.Body); err != nil {
+		log.Printf(`%s # body=%v, resp="%v", err=%v`, stat.Print(), stat.Request.Body, stat.Response.Body, err)
+	} else {
+		log.Printf(`%s # body=%s, resp="%v"`, stat.Print(), b, stat.Response.Body)
+	}
 }

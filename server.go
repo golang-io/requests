@@ -153,9 +153,6 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	current := mux.root.Find(strings.TrimLeft(r.URL.Path, "/"))
 	handler, options := current.handler, newOptions(mux.opts, current.opts...)
-	if options.Log != nil {
-		options.HttpHandler = append(options.HttpHandler, printHandler(options.Log))
-	}
 	for _, h := range options.HttpHandler {
 		handler = h(handler)
 	}
@@ -194,7 +191,6 @@ func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 	s.server.Addr = u.Host
 	s.options.OnStart(s.server)
 	s.server.RegisterOnShutdown(func() { s.options.OnShutdown(s.server) })
-	go s.Shutdown(ctx)
 	return s
 }
 

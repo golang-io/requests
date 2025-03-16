@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,8 +25,6 @@ type Options struct {
 	Timeout  time.Duration
 	MaxConns int
 	Verify   bool
-	Stream   func(int64, []byte) error
-	Log      func(ctx context.Context, stat *Stat)
 
 	Transport        http.RoundTripper
 	HttpRoundTripper []func(http.RoundTripper) http.RoundTripper
@@ -57,8 +56,8 @@ func newOptions(opts []Option, extends ...Option) Options {
 		MaxConns: 100,
 		Proxy:    http.ProxyFromEnvironment,
 
-		OnStart:    func(*http.Server) {},
-		OnShutdown: func(*http.Server) {},
+		OnStart:    func(s *http.Server) { log.Printf("http(s) serve %s", s.Addr) },
+		OnShutdown: func(s *http.Server) { log.Printf("http shutdown") },
 	}
 	for _, o := range opts {
 		o(&opt)
@@ -231,7 +230,7 @@ func LocalAddr(addr net.Addr) Option {
 // Stream handle func
 func Stream(stream func(int64, []byte) error) Option {
 	return func(o *Options) {
-		o.Stream = stream
+		o.HttpRoundTripper = append(o.HttpRoundTripper, streamRoundTrip(stream))
 	}
 }
 
@@ -269,9 +268,7 @@ func Proxy(addr string) Option {
 // Setup is used for client middleware
 func Setup(fn ...func(tripper http.RoundTripper) http.RoundTripper) Option {
 	return func(o *Options) {
-		for _, f := range fn {
-			o.HttpRoundTripper = append([]func(http.RoundTripper) http.RoundTripper{f}, o.HttpRoundTripper...)
-		}
+		o.HttpRoundTripper = append(o.HttpRoundTripper, fn...)
 	}
 }
 
@@ -291,10 +288,11 @@ func RoundTripper(tr http.RoundTripper) Option {
 	}
 }
 
-// Logf print log
+// Logf must be used as a first option.
 func Logf(f func(context.Context, *Stat)) Option {
 	return func(o *Options) {
-		o.Log = f
+		o.HttpRoundTripper = append([]func(http.RoundTripper) http.RoundTripper{printRoundTripper(f)}, o.HttpRoundTripper...)
+		o.HttpHandler = append(o.HttpHandler, printHandler(f))
 	}
 }
 
