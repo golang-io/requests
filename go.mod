@@ -1,3 +1,3 @@
 module github.com/golang-io/requests
 
-go 1.20
+go 1.22

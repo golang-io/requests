@@ -191,6 +191,7 @@ func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 	s.server.Addr = u.Host
 	s.options.OnStart(s.server)
 	s.server.RegisterOnShutdown(func() { s.options.OnShutdown(s.server) })
+	go s.Shutdown(ctx)
 	return s
 }
 

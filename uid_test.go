@@ -14,6 +14,11 @@ func uFormat(s string) int64 {
 	return tsm
 }
 
+func Test_GenId(t *testing.T) {
+	id := GenId()
+	t.Logf("id=%s, len=%d", id, len(id))
+}
+
 func Test_Id(t *testing.T) {
 	now := time.Now().UnixMicro()
 	nowLength := len(fmt.Sprintf("%d", now))

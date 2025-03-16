@@ -31,7 +31,7 @@ func Test_SSE(t *testing.T) {
 	}, requests.Use(requests.SSE()))
 	s := requests.NewServer(ctx, r, requests.URL("http://0.0.0.0:1234"))
 	go s.ListenAndServe()
-
+	time.Sleep(1 * time.Second)
 	c := requests.New(requests.Logf(requests.LogS))
 	resp, err := c.DoRequest(ctx, requests.URL("http://0.0.0.0:1234/sse"),
 		requests.Stream(func(i int64, b []byte) error {
@@ -55,7 +55,6 @@ func Test_SSE(t *testing.T) {
 	log.Printf("response=%s", resp.Content.String())
 	cancel()
 
-	s.Shutdown(ctx)
 	time.Sleep(1 * time.Second)
 }
 
