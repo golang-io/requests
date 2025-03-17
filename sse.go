@@ -21,7 +21,7 @@ func (s *ServerSentEvents) WriteHeader(statusCode int) {
 // Write implements http.ResponseWriter interface.
 // It writes the byte slice as a data event to the SSE stream.
 func (s *ServerSentEvents) Write(b []byte) (int, error) {
-	return s.Send("data", string(b))
+	return s.Send("data", b)
 }
 
 // Header implements http.ResponseWriter interface.
@@ -34,11 +34,10 @@ func (s *ServerSentEvents) Header() http.Header {
 // It automatically flushes the response after writing.
 // Parameters:
 //   - name: The event name (e.g., "data", "event", etc.)
-//   - format: The format string for the event data
-//   - v: Optional format arguments
-func (s *ServerSentEvents) Send(name string, format string, v ...any) (int, error) {
+//   - b: The format string for the event data
+func (s *ServerSentEvents) Send(name string, b []byte) (int, error) {
 	defer s.w.(http.Flusher).Flush()
-	return fmt.Fprintf(s.w, name+":"+format+"\n", v...)
+	return s.w.Write([]byte(name + ":" + string(b) + "\n"))
 }
 
 // End terminates the SSE stream by writing two newlines.
