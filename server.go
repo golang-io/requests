@@ -125,10 +125,10 @@ func (mux *ServeMux) Handle(path string, h http.Handler, opts ...Option) {
 // Route set any pattern path to handle
 func (mux *ServeMux) Route(path string, v any, opts ...Option) {
 	switch h := v.(type) {
-	case http.Handler:
-		mux.Handle(path, h, opts...)
 	case http.HandlerFunc:
 		mux.HandleFunc(path, h, opts...)
+	case http.Handler:
+		mux.Handle(path, h, opts...)
 	case func(http.ResponseWriter, *http.Request):
 		mux.HandleFunc(path, h, opts...)
 	default:
@@ -197,10 +197,8 @@ func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 
 // Shutdown gracefully shuts down the server without interrupting any active connections.
 func (s *Server) Shutdown(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return s.server.Shutdown(ctx)
-	}
+	<-ctx.Done()
+	return s.server.Shutdown(ctx)
 }
 
 // ListenAndServe listens on the TCP network address srv.Addr and then

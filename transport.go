@@ -125,3 +125,21 @@ func (t *Transport) RoundTripper(opts ...Option) http.RoundTripper {
 		return options.Transport.RoundTrip(r)
 	})
 }
+
+func Redirect(next http.RoundTripper) http.RoundTripper {
+	return RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		response, err := next.RoundTrip(req)
+		if err != nil {
+			return response, err
+		}
+		if response.StatusCode != http.StatusMovedPermanently && response.StatusCode != http.StatusFound {
+			return response, err
+		}
+		if req, err = NewRequestWithContext(req.Context(), Options{
+			Method: req.Method, URL: response.Header.Get("Location"), Header: req.Header, body: req.Body,
+		}); err != nil {
+			return response, err
+		}
+		return next.RoundTrip(req)
+	})
+}
