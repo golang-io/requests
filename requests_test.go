@@ -3,6 +3,7 @@ package requests
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -166,26 +167,57 @@ func Test_Stream(t *testing.T) {
 }
 
 func TestResponse_Download(t *testing.T) {
+	if err := os.MkdirAll("tmp", 0755); err != nil {
+		t.Fatalf("Failed to create tmp directory: %v", err)
+	}
+
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		text := "abc\ndef\nghij\n\n123"
 		fmt.Fprint(w, text)
 	}))
 	defer s.Close()
-
 	u := "https://go.dev/dl/go1.22.1.darwin-amd64.tar.gz" // a35015fca6f631f3501a36b3bccba9c5
+	//u := "https://dl.google.com/go/go1.22.1.darwin-amd64.tar.gz" // a35015fca6f631f3501a36b3bccba9c5
+
 	sess := New(URL(u))
 	f, err := os.OpenFile("tmp/xx.tar.gz", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+		return
+	}
 	defer f.Close()
 	sum := 0
-	resp, err := sess.DoRequest(context.Background(),
-		Stream(func(i int64, row []byte) error {
-			cnt, err := f.Write(row)
-			sum += cnt
-			return err
-		}))
+	_ = Stream(func(i int64, row []byte) error {
+		t.Logf("i=%d, len=%s", i, row)
+		cnt, err := f.Write(row)
+		sum += cnt
+		return err
+	})
+	resp, err := sess.DoRequest(context.Background(), Setup(Redirect), Trace())
 	if err != nil {
 		t.Logf("resp=%d, err=%s", resp.Content, err)
 		return
 	}
-	t.Logf("resp=%d, err=%s", resp.Content, err)
+	if resp.StatusCode != 200 {
+		t.Fatalf("resp=%s, err=%v", resp.Referer(), err)
+		return
+	}
+	io.Copy(f, resp.Content)
+	t.Logf("resp=%s, err=%v", resp.Content.Bytes(), err)
+}
+
+func Test_HttpGet(t *testing.T) {
+	resp, err := http.Get("https://go.dev/dl/go1.22.1.darwin-amd64.tar.gz")
+	if err != nil {
+		t.Fatalf("Failed to get: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	f, err := os.OpenFile("tmp/xx.tar.gz", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+		return
+	}
+	defer f.Close()
+	io.Copy(f, resp.Body)
 }
