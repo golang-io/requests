@@ -1,10 +1,9 @@
-package requests_test
+package requests
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/golang-io/requests"
 	"log"
 	"net/http"
 	"testing"
@@ -13,7 +12,7 @@ import (
 
 func Test_SSE(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	r := requests.NewServeMux(requests.Logf(requests.LogS))
+	r := NewServeMux(Logf(LogS))
 	r.Route("/123", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte("hello world"))
@@ -28,17 +27,16 @@ func Test_SSE(t *testing.T) {
 				w.Write([]byte(fmt.Sprintf(`{"a":"12345\n", "b": %d}`, i)))
 			}
 		}
-	}, requests.Use(requests.SSE()))
-	s := requests.NewServer(ctx, r, requests.URL("http://0.0.0.0:1234"))
+	}, Use(SSE()))
+	s := NewServer(ctx, r, URL("http://0.0.0.0:1234"))
 	go s.ListenAndServe()
 	time.Sleep(1 * time.Second)
-	c := requests.New(requests.Logf(requests.LogS))
-	resp, err := c.DoRequest(ctx, requests.URL("http://0.0.0.0:1234/sse"),
-		requests.Stream(func(i int64, b []byte) error {
-			return SSE(i, b, func(b []byte) error {
-				_, _ = fmt.Printf("%s\n", b)
-				return nil
-			})
+	c := New(Logf(LogS))
+	resp, err := c.DoRequest(ctx, URL("http://0.0.0.0:1234/sse"),
+		Stream(func(i int64, b []byte) error {
+
+			log.Printf("i=%d, b=%s", i, b)
+			return nil
 
 		}),
 	)
@@ -47,8 +45,7 @@ func Test_SSE(t *testing.T) {
 	}
 	log.Printf("response=%s", resp.Content.String())
 
-	log.Printf("----------------")
-	resp, err = c.DoRequest(ctx, requests.URL("http://0.0.0.0:1234/123"), requests.Body(`{"a":"b"}`))
+	resp, err = c.DoRequest(ctx, URL("http://0.0.0.0:1234/123"), Body(`{"a":"b"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +55,7 @@ func Test_SSE(t *testing.T) {
 	time.Sleep(1 * time.Second)
 }
 
-func SSE(i int64, b []byte, f func([]byte) error) error {
+func SSERound(i int64, b []byte, f func([]byte) error) error {
 	name, value, _ := bytes.Cut(bytes.TrimRight(b, "\n"), []byte(":"))
 	switch string(name) {
 	case "data":

@@ -34,7 +34,7 @@ func (s *ServerSentEvents) Header() http.Header {
 // It automatically flushes the response after writing.
 // Parameters:
 //   - name: The event name (e.g., "data", "event", etc.)
-//   - b: The format string for the event data
+//   - b: The byte slice containing the event data
 func (s *ServerSentEvents) Send(name string, b []byte) (int, error) {
 	defer s.w.(http.Flusher).Flush()
 	return s.w.Write([]byte(name + ":" + string(b) + "\n"))
@@ -48,26 +48,34 @@ func (s *ServerSentEvents) End() {
 
 // Read parses an SSE message from the given byte slice.
 // It handles different types of SSE events (empty, event, data).
-// Returns the event value for data events, or an error for unknown event types.
+// Returns:
+//   - For data events: returns the event value
+//   - For empty or event lines: returns nil, nil
+//   - For unknown events: returns nil and an error
 func (s *ServerSentEvents) Read(b []byte) ([]byte, error) {
 	name, value, _ := bytes.Cut(bytes.TrimRight(b, "\n"), []byte(":"))
 	switch string(name) {
 	case "":
-		// An empty line in the for ": something" is a comment and should be ignored.
-		// An empty line in the form ": something" is a comment and should be ignored.
+		// Empty lines or comments (": something") should be ignored
 		return nil, nil
 	case "event":
+		// Event type declarations are processed but not returned
 		return nil, nil
 	case "data":
+		// Data events return their value
 		return value, nil
 	default:
+		// Unknown event types return an error
 		return nil, fmt.Errorf("unknown event: %s", name)
 	}
 }
 
-// SSE returns a middleware function that wraps an http.Handler to support Server-Sent Events.
-// It sets the appropriate headers for SSE streaming and creates a new ServerSentEvents instance
-// for handling the response.
+// SSE returns a middleware function that enables Server-Sent Events support.
+// The middleware:
+//   - Sets appropriate SSE headers (Content-Type, Cache-Control, etc.)
+//   - Creates a ServerSentEvents wrapper for the response writer
+//   - Ensures proper stream termination via deferred End() call
+//   - Enables CORS support for cross-origin requests
 func SSE() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

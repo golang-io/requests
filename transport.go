@@ -10,7 +10,8 @@ import (
 	"time"
 )
 
-// WarpRoundTripper warp `http.RoundTripper`.
+// WarpRoundTripper wraps an http.RoundTripper instance.
+// This function returns a new decorator function that adds additional functionality to an existing RoundTripper.
 func WarpRoundTripper(next http.RoundTripper) func(http.RoundTripper) http.RoundTripper {
 	return func(http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -19,15 +20,18 @@ func WarpRoundTripper(next http.RoundTripper) func(http.RoundTripper) http.Round
 	}
 }
 
-// RoundTripperFunc is a http.RoundTripper implementation, which is a simple function.
+// RoundTripperFunc is a functional implementation of the http.RoundTripper interface.
+// It allows converting regular functions to the RoundTripper interface, facilitating functional extensions.
 type RoundTripperFunc func(*http.Request) (*http.Response, error)
 
-// RoundTrip implements http.RoundTripper.
+// RoundTrip implements the http.RoundTripper interface.
+// It directly calls the underlying function to complete the request sending and response receiving.
 func (fn RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return fn(r)
 }
 
-// printRoundTripper print http client request and response.
+// printRoundTripper creates a middleware for printing HTTP client request and response information.
+// Parameter f is a callback function for processing request statistics.
 func printRoundTripper(f func(ctx context.Context, stat *Stat)) func(http.RoundTripper) http.RoundTripper {
 	return func(next http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -39,7 +43,8 @@ func printRoundTripper(f func(ctx context.Context, stat *Stat)) func(http.RoundT
 	}
 }
 
-// printHandler print http server request and response.
+// printHandler creates a middleware for printing HTTP server request and response information.
+// It records the request processing time and related statistics.
 func printHandler(f func(ctx context.Context, stat *Stat)) func(handler http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,72 +58,80 @@ func printHandler(f func(ctx context.Context, stat *Stat)) func(handler http.Han
 	}
 }
 
+// Transport is a custom HTTP transport layer implementation.
+// It wraps the standard library's http.Transport and adds additional configuration options.
 type Transport struct {
-	opts []Option
-	*http.Transport
+	opts []Option          // Stores transport layer configuration options
+	*http.Transport       // Embeds the standard library's Transport
 }
 
+// newTransport creates a new Transport instance.
+// It configures connection pool, timeout settings, TLS, and other parameters.
 func newTransport(opts ...Option) *Transport {
 	options := newOptions(opts)
 	return &Transport{
 		opts: opts,
 		Transport: &http.Transport{
+			// Proxy sets the proxy function
 			Proxy: options.Proxy,
+			
+			// DialContext customizes connection creation logic
+			// Supports Unix domain sockets and TCP connections
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				// Handle Unix domain socket connections
 				if strings.HasPrefix(options.URL, "unix://") {
 					u, err := url.Parse(options.URL)
 					if err != nil {
 						return nil, err
 					}
-					// unix:///tmp/requests.sock => u.Scheme=unix, u.Host=, u.Path=/tmp/requests.sock
 					network, addr = u.Scheme, u.Path
 				}
+				
+				// Configure dialer parameters
 				dialer := net.Dialer{
-					Timeout:   10 * time.Second, // 限制建立TCP连接的时间
-					KeepAlive: 60 * time.Second,
-					LocalAddr: options.LocalAddr,
-					Resolver: &net.Resolver{
-						PreferGo:     true,
-						StrictErrors: false,
+					Timeout:   10 * time.Second,  // TCP connection timeout
+					KeepAlive: 60 * time.Second,  // TCP keepalive interval
+					LocalAddr: options.LocalAddr, // Local address binding
+					Resolver: &net.Resolver{      // DNS resolver configuration
+						PreferGo:     true,       // Prefer Go's DNS resolver
+						StrictErrors: false,      // Tolerate DNS resolution errors
 					},
 				}
 				return dialer.DialContext(ctx, network, addr)
 			},
-			MaxIdleConns: options.MaxConns, // 设置连接池的大小为100个连接
-
-			// 默认的DefaultMaxIdleConnsPerHost = 2 这个设置意思时尽管整个连接池是100个连接，但是每个host只有2个。
-			// 上面的例子中有100个goroutine尝试并发的对同一个主机发起http请求，但是连接池只能存放两个连接。
-			// 所以，第一轮完成请求时，2个连接保持打开状态。但是剩下的98个连接将会被关闭并进入TIME_WAIT状态。
-			// 因为这在一个循环中出现，所以会很快就积累上成千上万的TIME_WAIT状态的连接。
-			// 最终，会耗尽主机的所有可用端口，从而导致无法打开新的连接。
-			MaxIdleConnsPerHost: options.MaxConns,  // 设置每个Host最大的空闲链接
-			IdleConnTimeout:     120 * time.Second, // 意味着一个连接在连接池里最多保持120秒的空闲时间，超过这个时间将会被移除并关闭
-
-			//TLSHandshakeTimeout:   10 * time.Second, // 限制 TLS握手的时间
-			//ResponseHeaderTimeout: 10 * time.Second, // 限制读取response header的时间
-			DisableCompression: true,
-			DisableKeepAlives:  false,
+			
+			// Connection pool configuration
+			MaxIdleConns:        options.MaxConns,     // Maximum number of idle connections
+			MaxIdleConnsPerHost: options.MaxConns,     // Maximum number of idle connections per host
+			IdleConnTimeout:     120 * time.Second,    // Idle connection timeout
+			
+			// Connection behavior configuration
+			DisableCompression: true,                  // Disable compression
+			DisableKeepAlives:  false,                 // Enable Keep-Alive
+			
+			// TLS configuration
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: !options.Verify,
+				InsecureSkipVerify: !options.Verify,   // Whether to verify server certificates
 			},
 		},
 	}
 }
 
-// RoundTrip implements the [RoundTripper] interface.
-// Like the `http.RoundTripper` interface, the error types returned by RoundTrip are unspecified.
+// RoundTrip implements the RoundTripper interface.
+// It processes requests by calling the RoundTripper method.
 func (t *Transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return t.RoundTripper().RoundTrip(r)
 }
 
-// RoundTripper return http.RoundTripper.
-// Setup: session.Setup -> request.Setup
+// RoundTripper returns a configured http.RoundTripper.
+// It applies all registered middleware in reverse order.
 func (t *Transport) RoundTripper(opts ...Option) http.RoundTripper {
 	return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		options := newOptions(t.opts, opts...)
 		if options.Transport == nil {
 			options.Transport = t.Transport
 		}
+		// Apply middleware in reverse order
 		for i := len(options.HttpRoundTripper) - 1; i >= 0; i-- {
 			options.Transport = options.HttpRoundTripper[i](options.Transport)
 		}
@@ -126,20 +139,28 @@ func (t *Transport) RoundTripper(opts ...Option) http.RoundTripper {
 	})
 }
 
+// Redirect creates a middleware for handling HTTP redirects.
+// It handles 301 (Moved Permanently) and 302 (Found) status codes.
 func Redirect(next http.RoundTripper) http.RoundTripper {
 	return RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		response, err := next.RoundTrip(req)
 		if err != nil {
 			return response, err
 		}
+		// Check if redirection is needed
 		if response.StatusCode != http.StatusMovedPermanently && response.StatusCode != http.StatusFound {
 			return response, err
 		}
+		// Create redirect request
 		if req, err = NewRequestWithContext(req.Context(), Options{
-			Method: req.Method, URL: response.Header.Get("Location"), Header: req.Header, body: req.Body,
+			Method: req.Method,
+			URL:    response.Header.Get("Location"),
+			Header: req.Header,
+			body:   req.Body,
 		}); err != nil {
 			return response, err
 		}
+		// Execute redirect request
 		return next.RoundTrip(req)
 	})
 }
