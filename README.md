@@ -6,6 +6,8 @@
     <a href="https://github.com/golang-io/requests/actions/workflows/go.yml"><img src="https://github.com/golang-io/requests/actions/workflows/go.yml/badge.svg?branch=main" alt="Build status"></a>
     <a href="https://goreportcard.com/report/github.com/golang-io/requests"><img src="https://goreportcard.com/badge/github.com/golang-io/requests" alt="go report"></a>
 	<a href="https://sourcegraph.com/github.com/golang-io/requests?badge"><img src="https://sourcegraph.com/github.com/golang-io/requests/-/badge.svg" alt="requests on Sourcegraph"></a>
+	<a href="https://codecov.io/gh/golang-io/requests" > <img src="https://codecov.io/gh/golang-io/requests/graph/badge.svg?token=T8MZ92JL1T"/> </a>
+
 </div>
 <hr/>
 
