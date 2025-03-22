@@ -3,10 +3,13 @@ package requests
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func Test_Setup(t *testing.T) {
@@ -49,4 +52,124 @@ func Test_Setup(t *testing.T) {
 		}
 	}
 
+}
+
+func TestWarpRoundTripper(t *testing.T) {
+	// 测试装饰器链
+	var order []string
+	rt1 := RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		order = append(order, "rt1")
+		return &http.Response{StatusCode: 200}, nil
+	})
+
+	rt2 := WarpRoundTripper(rt1)(http.DefaultTransport)
+	_, err := rt2.RoundTrip(&http.Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 1 || order[0] != "rt1" {
+		t.Error("装饰器执行顺序错误")
+	}
+}
+
+func TestNewTransport(t *testing.T) {
+	tests := []struct {
+		name string
+		opts []Option
+		test func(*testing.T, *http.Transport)
+	}{
+		{
+			name: "Unix套接字",
+			opts: []Option{URL("unix:///tmp/test.sock")},
+			test: func(t *testing.T, tr *http.Transport) {
+				_, err := tr.DialContext(context.Background(), "unix", "/tmp/test.sock")
+				if err == nil {
+					t.Error("期望Unix套接字连接失败")
+				}
+			},
+		},
+		{
+			name: "本地地址绑定",
+			opts: []Option{LocalAddr(&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})},
+			test: func(t *testing.T, tr *http.Transport) {
+				conn, err := tr.DialContext(context.Background(), "tcp", "example.com:80")
+				if err == nil {
+					conn.Close()
+				}
+			},
+		},
+		{
+			name: "TLS配置",
+			opts: []Option{Verify(false)},
+			test: func(t *testing.T, tr *http.Transport) {
+				if tr.TLSClientConfig.InsecureSkipVerify != true {
+					t.Error("TLS验证配置错误")
+				}
+			},
+		},
+		{
+			name: "连接池配置",
+			opts: []Option{MaxConns(100)},
+			test: func(t *testing.T, tr *http.Transport) {
+				if tr.MaxIdleConns != 100 || tr.MaxIdleConnsPerHost != 100 {
+					t.Error("连接池配置错误")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := newTransport(tt.opts...)
+			tt.test(t, tr)
+		})
+	}
+}
+
+func TestTransportWithRealServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond) // 模拟处理延迟
+		w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	tr := newTransport(
+		Timeout(100*time.Millisecond),
+		MaxConns(10),
+		Verify(false),
+	)
+
+	client := &http.Client{Transport: tr}
+
+	// 并发测试
+	for i := 0; i < 10; i++ {
+		go func() {
+			resp, err := client.Get(server.URL)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer resp.Body.Close()
+		}()
+	}
+
+	time.Sleep(200 * time.Millisecond)
+}
+
+func TestTransportProxy(t *testing.T) {
+	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("proxy response"))
+	}))
+	defer proxyServer.Close()
+
+	tr := newTransport(Proxy(proxyServer.URL))
+
+	// 验证代理设置是否生效
+	proxyURL, err := tr.Proxy(&http.Request{URL: &url.URL{Scheme: "http", Host: "example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proxyURL == nil {
+		t.Error("代理未正确设置")
+	}
 }
