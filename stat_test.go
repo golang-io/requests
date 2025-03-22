@@ -118,7 +118,7 @@ func TestServeLoad(t *testing.T) {
 	// 创建一个模拟的响应写入器
 	w := &ResponseWriter{
 		StatusCode: 201,
-		Content:    []byte(`{"status":"created"}`),
+		Content:    bytes.NewBufferString(`{"status":"created"}`),
 	}
 
 	// 创建请求体缓冲区
@@ -145,8 +145,8 @@ func TestServeLoad(t *testing.T) {
 		t.Errorf("期望 StatusCode 为 201，实际为 %d", stat.Response.StatusCode)
 	}
 
-	if stat.Response.ContentLength != int64(len(string(w.Content))) { // `{"status":"created"}` 的长度
-		t.Errorf("期望 ContentLength 为 %d，实际为 %d", int64(len(string(w.Content))), stat.Response.ContentLength)
+	if stat.Response.ContentLength != int64(w.Content.Len()) { // `{"status":"created"}` 的长度
+		t.Errorf("期望 ContentLength 为 %d，实际为 %d", int64(w.Content.Len()), stat.Response.ContentLength)
 	}
 
 	// 验证请求体解析

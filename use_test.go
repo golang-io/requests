@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -32,10 +31,10 @@ func Test_SSE(t *testing.T) {
 	go s.ListenAndServe()
 	time.Sleep(1 * time.Second)
 	c := New(Logf(LogS))
-	resp, err := c.DoRequest(ctx, URL("http://0.0.0.0:1234/sse"),
+	_, err := c.DoRequest(ctx, URL("http://0.0.0.0:1234/sse"),
 		Stream(func(i int64, b []byte) error {
 
-			log.Printf("i=%d, b=%s", i, b)
+			t.Logf("i=%d, b=%s", i, b)
 			return nil
 
 		}),
@@ -43,13 +42,12 @@ func Test_SSE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Printf("response=%s", resp.Content.String())
 
-	resp, err = c.DoRequest(ctx, URL("http://0.0.0.0:1234/123"), Body(`{"a":"b"}`))
+	_, err = c.DoRequest(ctx, URL("http://0.0.0.0:1234/123"), Body(`{"a":"b"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Printf("response=%s", resp.Content.String())
+
 	cancel()
 
 	time.Sleep(1 * time.Second)

@@ -14,7 +14,7 @@ import (
 // so, session is also safe for concurrent use by multiple goroutines.
 type Session struct {
 	opts      []Option
-	transport *Transport
+	transport *http.Transport
 	client    *http.Client
 }
 
@@ -34,7 +34,7 @@ func (s *Session) HTTPClient() *http.Client {
 
 // Transport returns *http.Transport.
 func (s *Session) Transport() *http.Transport {
-	return s.transport.Transport
+	return s.transport
 }
 
 // RoundTrip implements the [RoundTripper] interface.
@@ -43,13 +43,8 @@ func (s *Session) RoundTrip(r *http.Request) (*http.Response, error) {
 	return s.RoundTripper().RoundTrip(r)
 }
 
-// RoundTripper return http.RoundTripper.
-// Setup: session.Setup -> request.Setup
-func (s *Session) RoundTripper(opts ...Option) http.RoundTripper {
-	return s.transport.RoundTripper(opts...)
-}
-
 // Do send a request and  return `http.Response`. DO NOT forget close `resp.Body`.
+// transport【http.Transport】-> http.client.Do -> transport.RoundTrip
 func (s *Session) Do(ctx context.Context, opts ...Option) (*http.Response, error) {
 	options := newOptions(s.opts, opts...)
 	req, err := NewRequestWithContext(ctx, options)
@@ -81,4 +76,20 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 	_, resp.Err = resp.Content.ReadFrom(resp.Response.Body)
 	resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
 	return resp, resp.Err
+}
+
+// RoundTripper returns a configured http.RoundTripper.
+// It applies all registered middleware in reverse order.
+func (s *Session) RoundTripper(opts ...Option) http.RoundTripper {
+	return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		options := newOptions(s.opts, opts...)
+		if options.Transport == nil {
+			options.Transport = RoundTripperFunc(s.client.Do)
+		}
+		// Apply middleware in reverse order
+		for i := len(options.HttpRoundTripper) - 1; i >= 0; i-- {
+			options.Transport = options.HttpRoundTripper[i](options.Transport)
+		}
+		return options.Transport.RoundTrip(r)
+	})
 }

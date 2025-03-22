@@ -8,26 +8,39 @@ import (
 	"time"
 )
 
-// Response wrap `http.Response` struct.
+// Response 包装了 http.Response 结构体，提供了额外的功能：
+// 1. 记录请求开始时间和耗时
+// 2. 缓存响应内容
+// 3. 错误处理
+// 4. 统计信息收集
 type Response struct {
-	*http.Request
-	*http.Response
-	StartAt time.Time
-	Cost    time.Duration
-	Content *bytes.Buffer
-	Err     error
+	*http.Request                // 原始 HTTP 请求
+	*http.Response               // 原始 HTTP 响应
+	StartAt        time.Time     // 请求开始时间
+	Cost           time.Duration // 请求耗时
+	Content        *bytes.Buffer // 响应内容缓存
+	Err            error         // 请求过程中的错误
 }
 
+// newResponse 创建一个新的 Response 实例
+// 参数 r 是原始的 HTTP 请求
 func newResponse(r *http.Request) *Response {
-	return &Response{Request: r, StartAt: time.Now(), Response: &http.Response{}, Content: &bytes.Buffer{}}
+	return &Response{
+		Request:  r,
+		StartAt:  time.Now(),
+		Response: &http.Response{},
+		Content:  &bytes.Buffer{},
+	}
 }
 
-// String implement fmt.Stringer interface.
+// String 实现 fmt.Stringer 接口
+// 返回响应内容的字符串形式
 func (resp *Response) String() string {
 	return resp.Content.String()
 }
 
-// Error implement error interface.
+// Error 实现 error 接口
+// 返回请求过程中的错误信息
 func (resp *Response) Error() string {
 	if resp.Err == nil {
 		return ""
@@ -35,15 +48,21 @@ func (resp *Response) Error() string {
 	return resp.Err.Error()
 }
 
-// Stat stat
+// Stat 返回请求的统计信息
+// 包括请求/响应的详细信息、耗时等
 func (resp *Response) Stat() *Stat {
 	return responseLoad(resp)
 }
 
-// streamRead xx
+// streamRead 按行读取数据流
+// reader: 输入的数据流
+// fn: 处理每一行数据的回调函数，参数为行号和行内容
+// 返回值：读取的总字节数和可能的错误
 func streamRead(reader io.Reader, fn func(int64, []byte) error) (int64, error) {
+	// 创建一个 1MB 缓冲的读取器
 	i, cnt, r := int64(0), int64(0), bufio.NewReaderSize(reader, 1024*1024)
 	for {
+		// 读取直到遇到换行符
 		raw, err1 := r.ReadBytes(10) // ascii('\n') = 10
 		if err1 != nil && err1 != io.EOF {
 			return cnt, err1
@@ -52,32 +71,6 @@ func streamRead(reader io.Reader, fn func(int64, []byte) error) (int64, error) {
 		i, cnt = i+1, cnt+int64(len(raw))
 		if err2 := fn(i, raw); err1 == io.EOF || err2 != nil {
 			return cnt, err2
-
 		}
-	}
-}
-
-// streamRoundTrip 创建一个流式处理的RoundTripper中间件
-// 参数 f 是流处理回调函数，接收两个参数：
-//   - i int64: 当前处理的数据块序号（从1开始）
-//   - raw []byte: 原始数据块内容（按换行符分割）
-//
-// 返回值是可用于HTTP客户端中间件链的RoundTripper
-// 适用场景：大文件下载、实时事件流处理等需要边接收边处理的场景
-// 注意：与普通RoundTripper不同，此方法会流式处理响应体而不是缓存全部内容
-func streamRoundTrip(fn func(i int64, raw []byte) error) func(http.RoundTripper) http.RoundTripper {
-	return func(next http.RoundTripper) http.RoundTripper {
-		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
-			resp := newResponse(r)
-			if resp.Response, resp.Err = next.RoundTrip(r); resp.Err != nil {
-				return resp.Response, resp.Err
-			}
-
-			if resp.Response.ContentLength, resp.Err = streamRead(resp.Response.Body, fn); resp.Err != nil {
-				return resp.Response, resp.Err
-			}
-			resp.Response.Body = io.NopCloser(bytes.NewReader([]byte("[stream]")))
-			return resp.Response, resp.Err
-		})
 	}
 }
