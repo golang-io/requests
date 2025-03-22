@@ -153,11 +153,11 @@ func serveLoad(w *ResponseWriter, r *http.Request, start time.Time, buf *bytes.B
 	}
 	stat.Response.URL = scheme + r.Host
 	stat.Response.StatusCode = w.StatusCode
-	stat.Response.ContentLength = int64(len(w.Content))
+	stat.Response.ContentLength = int64(w.Content.Len())
 	stat.Response.Header = make(map[string]string)
 	for k, v := range r.Header {
 		stat.Response.Header[k] = v[0]
 	}
-	stat.Response.Body = string(w.Content)
+	stat.Response.Body = w.Content.String()
 	return stat
 }

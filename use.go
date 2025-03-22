@@ -2,8 +2,10 @@ package requests
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // ServerSentEvents implements http.Handler interface for Server-Sent Events (SSE) streaming.
@@ -87,6 +89,36 @@ func SSE() func(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			next.ServeHTTP(sse, r)
+		})
+	}
+}
+
+func CORS() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// printHandler creates a middleware for printing HTTP server request and response information.
+// It records the request processing time and related statistics.
+func printHandler(f func(ctx context.Context, stat *Stat)) func(handler http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			ww := newResponseWriter(w)
+			buf, body, _ := CopyBody(r.Body)
+			r.Body = body
+			next.ServeHTTP(ww, r)
+			f(r.Context(), serveLoad(ww, r, start, buf))
 		})
 	}
 }

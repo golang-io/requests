@@ -30,7 +30,7 @@ func (m *mockResponseWriter) WriteHeader(code int)        { m.statuscode = code 
 // TestResponseWriterBasic tests basic functionality of ResponseWriter
 func TestResponseWriterBasic(t *testing.T) {
 	mock := newMockResponseWriter()
-	w := &ResponseWriter{ResponseWriter: mock}
+	w := newResponseWriter(mock)
 
 	// Test WriteHeader
 	w.WriteHeader(http.StatusCreated)
@@ -53,7 +53,7 @@ func TestResponseWriterBasic(t *testing.T) {
 	if n != len(content) {
 		t.Errorf("Expected to write %d bytes, wrote %d", len(content), n)
 	}
-	if !bytes.Equal(w.Content, content) {
+	if !bytes.Equal(w.Content.Bytes(), content) {
 		t.Error("Written content does not match")
 	}
 }
@@ -61,7 +61,7 @@ func TestResponseWriterBasic(t *testing.T) {
 // TestResponseWriterIntegration tests the ResponseWriter in a real HTTP server context
 func TestResponseWriterIntegration(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rw := &ResponseWriter{ResponseWriter: w}
+		rw := newResponseWriter(w)
 		rw.WriteHeader(http.StatusAccepted)
 		rw.Write([]byte("hello world"))
 	})
@@ -92,7 +92,7 @@ func TestResponseWriterIntegration(t *testing.T) {
 // TestResponseWriterConcurrency tests concurrent writes to ResponseWriter
 func TestResponseWriterConcurrency(t *testing.T) {
 	mock := newMockResponseWriter()
-	w := &ResponseWriter{ResponseWriter: mock}
+	w := newResponseWriter(mock)
 
 	var wg sync.WaitGroup
 	workers := 10
@@ -115,7 +115,7 @@ func TestResponseWriterConcurrency(t *testing.T) {
 	wg.Wait()
 
 	// Verify that all writes were recorded
-	if len(w.Content) == 0 {
+	if w.Content.Len() == 0 {
 		t.Error("No content was written in concurrent test")
 	}
 }
@@ -123,7 +123,7 @@ func TestResponseWriterConcurrency(t *testing.T) {
 // TestResponseWriterHijack tests the hijack functionality
 func TestResponseWriterHijack(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hijackable := &ResponseWriter{ResponseWriter: w}
+		hijackable := newResponseWriter(w)
 		conn, bufrw, err := hijackable.Hijack()
 		if err != nil {
 			t.Errorf("Hijack failed: %v", err)
@@ -156,7 +156,7 @@ func TestResponseWriterHijack(t *testing.T) {
 // BenchmarkResponseWriterWrite benchmarks the Write method
 func BenchmarkResponseWriterWrite(b *testing.B) {
 	mock := newMockResponseWriter()
-	w := &ResponseWriter{ResponseWriter: mock}
+	w := newResponseWriter(mock)
 	content := []byte("benchmark content")
 
 	b.ResetTimer()
@@ -168,7 +168,7 @@ func BenchmarkResponseWriterWrite(b *testing.B) {
 // BenchmarkResponseWriterConcurrentWrite benchmarks concurrent writes
 func BenchmarkResponseWriterConcurrentWrite(b *testing.B) {
 	mock := newMockResponseWriter()
-	w := &ResponseWriter{ResponseWriter: mock}
+	w := newResponseWriter(mock)
 	content := []byte("concurrent benchmark content")
 
 	b.ResetTimer()
@@ -182,7 +182,7 @@ func BenchmarkResponseWriterConcurrentWrite(b *testing.B) {
 // TestResponseWriterFlush tests the flush functionality
 func TestResponseWriterFlush(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		flusher := &ResponseWriter{ResponseWriter: w}
+		flusher := newResponseWriter(w)
 		flusher.Write([]byte("chunk1"))
 		flusher.Flush()
 		time.Sleep(10 * time.Millisecond)

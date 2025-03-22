@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"testing"
@@ -44,4 +45,38 @@ func TestSession_Do(t *testing.T) {
 			_, _ = fmt.Printf("%s\n", stat)
 		}))
 
+}
+
+// 串行基准测试
+// go test -race -run=^$ -bench=^BenchmarkDoRequest -benchmem
+func BenchmarkDoRequestSerial(b *testing.B) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(w, r.Body)
+	}))
+	defer s.Close()
+
+	c := New(URL(s.URL))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = c.DoRequest(context.Background(), Body("."))
+	}
+}
+
+// 并行基准测试
+// go test -race -run=^$ -bench=^BenchmarkDoRequest -benchmem
+func BenchmarkDoRequestParallel(b *testing.B) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(w, r.Body)
+	}))
+	defer s.Close()
+
+	c := New(URL(s.URL))
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = c.DoRequest(context.Background(), Body("."))
+		}
+	})
 }

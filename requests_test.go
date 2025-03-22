@@ -4,32 +4,38 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func Test_Basic(t *testing.T) {
-	resp, err := Get("http://httpbin.org/get")
-	t.Logf("%#v, %v", resp, err)
-	//resp, _ = Post("http://httpbin.org/post", "application/json", strings.NewReader(`{"a": "b"}`))
-	//t.Log(resp.Text())
+var s *Server
+
+func TestMain(m *testing.M) {
+	mux := NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hello world"))
+	})
+	s = NewServer(context.Background(), mux, URL("http://127.0.0.1:65534"))
+
+	go s.ListenAndServe()
+	defer s.Shutdown(context.Background())
+	os.Exit(m.Run())
 }
 
 func Test_ProxyGet(t *testing.T) {
-	t.Log("Testing get request")
 	sess := New(
 		Header("a", "b"),
 		Cookie(http.Cookie{Name: "username", Value: "golang"}),
 		BasicAuth("user", "123456"),
-		Timeout(3*time.Second),
+		Timeout(5*time.Second),
 		//Hosts(map[string][]string{"127.0.0.1:8080": {"192.168.1.1:80"}, "4.org:80": {"httpbin.org:80"}}),
 		//Proxy("http://127.0.0.1:8080"),
 	)
@@ -103,14 +109,14 @@ func Test_FormPost(t *testing.T) {
 		//TraceLv(9),
 	)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 		return
 	}
 	t.Log(resp.StatusCode, err, resp.Response.ContentLength, resp.Request.ContentLength)
 
 }
 
-func Test_Race(t *testing.T) {
+func Test_DoRequestRace(t *testing.T) {
 	opts := Options{}
 	ctx := context.Background()
 	t.Logf("%#v", opts)
@@ -176,7 +182,7 @@ func TestResponse_Download(t *testing.T) {
 		sum += cnt
 		return err
 	})
-	resp, err := sess.DoRequest(context.Background(), Setup(Redirect))
+	resp, err := sess.DoRequest(context.Background(), Trace())
 	if err != nil {
 		t.Logf("resp=%d, err=%s", resp.Content, err)
 		return
@@ -197,11 +203,25 @@ func TestRequestWithTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
+	setup := func(name string) func(next http.RoundTripper) http.RoundTripper {
+		return func(next http.RoundTripper) http.RoundTripper {
+			return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				t.Logf("timeout %s test prev", name)
+				defer t.Logf("timeout %s test next", name)
+				return next.RoundTrip(r)
+			})
+		}
+	}
+
 	// 测试超时情况
-	sess := New(Timeout(10 * time.Millisecond))
-	_, err := sess.DoRequest(context.Background(), URL(server.URL))
+	sess := New(Timeout(10*time.Millisecond), Logf(LogS), Setup(setup("session0"), setup("session1")))
+	_, err := sess.DoRequest(context.Background(), URL(server.URL), Setup(setup("request0-0"), setup("request0-1")))
+	t.Logf("timeout err=%v", err)
 	if err == nil {
-		t.Skip("期望超时错误，但没有发生")
+		t.Error("期望发生超时错误，但没有")
+	}
+	if !strings.Contains(err.Error(), "Client.Timeout exceeded") {
+		t.Error("发生错误，但不是超时")
 	}
 
 	// 测试非超时情况
