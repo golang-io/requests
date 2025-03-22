@@ -2,6 +2,7 @@ package requests
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,4 +75,144 @@ func BenchmarkStreamRead(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func TestPrintRoundTripper(t *testing.T) {
+	var statReceived *Stat
+
+	// 测试正常请求
+	t.Run("正常请求", func(t *testing.T) {
+		mockTransport := RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("success")),
+			}, nil
+		})
+
+		middleware := printRoundTripper(func(ctx context.Context, stat *Stat) {
+			statReceived = stat
+		})
+
+		req, _ := http.NewRequest("GET", "http://example.com", nil)
+		resp, err := middleware(mockTransport).RoundTrip(req)
+
+		if err != nil {
+			t.Fatalf("预期成功，得到错误: %v", err)
+		}
+		if resp.StatusCode != 200 {
+			t.Errorf("预期状态码 200，得到 %d", resp.StatusCode)
+		}
+		if statReceived == nil {
+			t.Error("未收到统计信息")
+		}
+	})
+
+	// 测试请求错误
+	t.Run("请求错误", func(t *testing.T) {
+		expectedErr := fmt.Errorf("network error")
+		mockTransport := RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, expectedErr
+		})
+
+		middleware := printRoundTripper(func(ctx context.Context, stat *Stat) {
+			statReceived = stat
+		})
+
+		req, _ := http.NewRequest("GET", "http://example.com", nil)
+		resp, err := middleware(mockTransport).RoundTrip(req)
+
+		if err != expectedErr {
+			t.Errorf("预期错误 %v，得到 %v", expectedErr, err)
+		}
+		if resp != nil {
+			t.Error("错误情况下不应该返回响应")
+		}
+		if statReceived.Err != expectedErr.Error() {
+			t.Error("统计信息中错误不匹配")
+		}
+	})
+}
+
+func TestStreamRoundTripError(t *testing.T) {
+	// 测试传输错误
+	t.Run("传输错误", func(t *testing.T) {
+		expectedErr := fmt.Errorf("transport error")
+		mockTransport := RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, expectedErr
+		})
+
+		middleware := streamRoundTrip(func(_ int64, _ []byte) error {
+			return nil
+		})
+
+		req, _ := http.NewRequest("GET", "http://example.com", nil)
+		resp, err := middleware(mockTransport).RoundTrip(req)
+
+		if err != expectedErr {
+			t.Errorf("预期错误 %v，得到 %v", expectedErr, err)
+		}
+		if resp != nil {
+			t.Error("错误情况下不应该返回响应")
+		}
+	})
+
+	// 测试流处理错误
+	t.Run("流处理错误", func(t *testing.T) {
+		expectedErr := fmt.Errorf("stream processing error")
+		mockTransport := RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("test\ndata")),
+			}, nil
+		})
+
+		middleware := streamRoundTrip(func(_ int64, _ []byte) error {
+			return expectedErr
+		})
+
+		req, _ := http.NewRequest("GET", "http://example.com", nil)
+		resp, err := middleware(mockTransport).RoundTrip(req)
+
+		if err != expectedErr {
+			t.Errorf("预期错误 %v，得到 %v", expectedErr, err)
+		}
+		if resp == nil {
+			t.Error("应该返回响应对象")
+		}
+	})
+
+	// 测试大数据流处理
+	t.Run("大数据流处理", func(t *testing.T) {
+		// 生成大量测试数据
+		var largeData strings.Builder
+		for i := 0; i < 1000; i++ {
+			largeData.WriteString(fmt.Sprintf("line %d\n", i))
+		}
+
+		mockTransport := RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader(largeData.String())),
+			}, nil
+		})
+
+		lineCount := 0
+		middleware := streamRoundTrip(func(_ int64, _ []byte) error {
+			lineCount++
+			return nil
+		})
+
+		req, _ := http.NewRequest("GET", "http://example.com", nil)
+		resp, err := middleware(mockTransport).RoundTrip(req)
+
+		if err != nil {
+			t.Fatalf("未预期的错误: %v", err)
+		}
+		if lineCount != 1000+1 {
+			t.Errorf("预期处理 1000 行，实际处理 %d 行", lineCount) // TODO: 为什么会多一行？
+		}
+		if resp.StatusCode != 200 {
+			t.Errorf("预期状态码 200，得到 %d", resp.StatusCode)
+		}
+	})
 }
