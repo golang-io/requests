@@ -245,7 +245,7 @@ func TestResponseWriterRead(t *testing.T) {
 	// 测试读取完后的EOF
 	n, err = w.Read(buf)
 	if err != io.EOF {
-		t.Errorf("Expected EOF after reading all data, got %v", err)
+		t.Errorf("Expected EOF after reading all data, got n=%d, err=%v", n, err)
 	}
 }
 

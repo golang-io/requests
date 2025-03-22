@@ -30,7 +30,7 @@ func makeBody(body any) (io.Reader, error) {
 		return bytes.NewReader(v), nil
 	case string:
 		return strings.NewReader(v), nil
-	case *bytes.Buffer, bytes.Buffer:
+	case *bytes.Buffer:
 		return body.(io.Reader), nil
 	case io.Reader, io.ReadSeeker, *bytes.Reader, *strings.Reader:
 		return body.(io.Reader), nil
