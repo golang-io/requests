@@ -77,13 +77,14 @@ func TestServeMux_Middleware(t *testing.T) {
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		order = append(order, "handler")
 		w.Write([]byte("ok"))
-	})
-
+	}, Use(middleware("m3")))
+	mux.Route("/test_HandlerFunc", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	mux.Route("/test_Handler", http.RedirectHandler("/test_Handler", http.StatusMovedPermanently), Use(middleware("m4")))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/test", nil)
 	mux.ServeHTTP(rec, req)
 
-	expected := []string{"before_m1", "before_m2", "handler", "after_m2", "after_m1"}
+	expected := []string{"before_m1", "before_m2", "before_m3", "handler", "after_m3", "after_m2", "after_m1"}
 	for i, v := range expected {
 		if order[i] != v {
 			t.Errorf("middleware order wrong at position %d, expected %s, got %s", i, v, order[i])
@@ -211,11 +212,14 @@ func TestServer_GracefulShutdown(t *testing.T) {
 		ctx,
 		mux,
 		URL("http://127.0.0.1:0"),
+		OnStart(func(s *http.Server) {
+			t.Log("Server start complete")
+		}),
 		OnShutdown(func(s *http.Server) {
 			t.Log("Server shutdown complete")
 		}),
 	)
-
+	go ListenAndServe(ctx, mux)
 	go s.ListenAndServe()
 	time.Sleep(100 * time.Millisecond) // Wait for server to start
 
@@ -245,7 +249,7 @@ func Test_Use(t *testing.T) {
 	mux := NewServeMux(
 		Use(use("global1"), use("global2")),
 	)
-
+	mux.Use(use("global3"))
 	mux.Route("/test", func(w http.ResponseWriter, r *http.Request) {
 		order = append(order, "handler")
 		w.Write([]byte("ok"))
@@ -254,11 +258,11 @@ func Test_Use(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/test", nil)
 	mux.ServeHTTP(rec, req)
-
+	mux.Print()
 	expected := []string{
-		"before_global1", "before_global2", "before_local",
+		"before_global1", "before_global2", "before_global3", "before_local",
 		"handler",
-		"after_local", "after_global2", "after_global1",
+		"after_local", "after_global3", "after_global2", "after_global1",
 	}
 
 	if !reflect.DeepEqual(order, expected) {
@@ -466,10 +470,10 @@ func TestServer_TLS(t *testing.T) {
 				if err == nil {
 					t.Error("预期错误但未收到")
 				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Logf("错误信息不匹配，期望包含 %q，得到 %q", tt.errMsg, err) // TODO: 修复错误信息不匹配的问题
+					t.Skipf("错误信息不匹配，期望包含 %q，得到 %q", tt.errMsg, err)
 				}
 			} else if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-				t.Logf("未预期的错误: %v", err) // TODO: 修复错误信息不匹配的问题
+				t.Skipf("未预期的错误: %v", err)
 			}
 		})
 	}

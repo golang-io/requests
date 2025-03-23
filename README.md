@@ -228,7 +228,6 @@ import (
 )
 
 func main() {
-	// TraceLv ranges from 0-4, with higher levels providing more detail
 	sess := requests.New(
 		requests.URL("https://httpbin.org/get"),
 		requests.Trace(),  // Most detailed tracing

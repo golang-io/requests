@@ -43,7 +43,7 @@ func TestServerSentEvents_Basic(t *testing.T) {
 	}
 
 	// 测试 Send
-	n, err = sse.Send("event", []byte("test event"))
+	_, err = sse.Send("event", []byte("test event"))
 	if err != nil {
 		t.Errorf("Send 失败: %v", err)
 	}
