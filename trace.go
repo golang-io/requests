@@ -129,7 +129,7 @@ func show(prompt string, b []byte, mLimit int) string {
 	var buf bytes.Buffer
 	for _, line := range bytes.Split(b, []byte("\n")) {
 		buf.Write([]byte(prompt))
-		buf.Write(bytes.Replace(line, []byte("%"), []byte("%%"), -1))
+		buf.Write(line)
 		buf.WriteString("\n")
 	}
 	str := buf.String()
@@ -165,7 +165,7 @@ func traceLv(used bool, mLimit ...int) func(http.RoundTripper) http.RoundTripper
 			}
 			resp, err := next.RoundTrip(req2)
 
-			Log(show("> ", reqLog, maxLimit))
+			Log("%s", show("> ", reqLog, maxLimit))
 
 			if err != nil {
 				return nil, err
@@ -185,7 +185,7 @@ func traceLv(used bool, mLimit ...int) func(http.RoundTripper) http.RoundTripper
 				return nil, err
 			}
 			resp.Body = r
-			Log(show("", buf.Bytes(), maxLimit))
+			Log("%s", show("", buf.Bytes(), maxLimit))
 
 			return resp, nil
 		})

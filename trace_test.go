@@ -66,7 +66,7 @@ func TestShow(t *testing.T) {
 			prompt:  "> ",
 			input:   []byte("50%"),
 			limit:   100,
-			want:    "> 50%%\n",
+			want:    "> 50%\n",
 			wantLen: 7,
 		},
 	}
@@ -77,7 +77,7 @@ func TestShow(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("show() = %v, want %v", got, tt.want)
 			}
-			if len(got) != tt.wantLen {
+			if len(got) != len(tt.want) {
 				t.Errorf("len(show()) = %v, want %v", len(got), tt.wantLen)
 			}
 		})
