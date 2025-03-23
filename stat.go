@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -90,7 +89,7 @@ func responseLoad(resp *Response) *Stat {
 	if resp.Request != nil {
 		stat.RequestId = resp.Request.Header.Get(RequestId)
 		stat.Request.Method = resp.Request.Method
-		stat.Request.URL = strings.ReplaceAll(resp.Request.URL.String(), "%", "%%")
+		stat.Request.URL = resp.Request.URL.String()
 		if resp.Request.GetBody != nil {
 			body, err := resp.Request.GetBody()
 			if err != nil {
@@ -137,7 +136,7 @@ func serveLoad(w *ResponseWriter, r *http.Request, start time.Time, buf *bytes.B
 	for k, v := range r.Header {
 		stat.Request.Header[k] = v[0]
 	}
-	stat.Request.URL = strings.ReplaceAll(r.URL.String(), "%", "%%")
+	stat.Request.URL = r.URL.String()
 
 	if buf != nil {
 		m := make(map[string]any)
