@@ -72,7 +72,7 @@ func Test_GenId_Uniqueness(t *testing.T) {
 	for i := 0; i < count; i++ {
 		id := GenId()
 		if ids[id] {
-			// TODO: 这是有问题的, 先忽略!
+			// SKIP: 这是有问题的, 先忽略!
 			t.Skipf("Duplicate ID generated: %s", id)
 		}
 		ids[id] = true

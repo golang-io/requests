@@ -30,6 +30,24 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestDeRequest_Trace(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sse := &ServerSentEvents{w: w}
+		defer sse.End()
+		for range 10 {
+			time.Sleep(1 * time.Second)
+			sse.Write([]byte("test."))
+		}
+	}))
+	defer server.Close()
+	sess := New(Timeout(20 * time.Second))
+	resp, err := sess.DoRequest(context.Background(), URL(server.URL), Method("GET"), Trace(), Logf(LogS), Stream(func(i int64, row []byte) error {
+		fmt.Fprintf(os.Stderr, "streamOutput: %s", row)
+		return nil
+	}))
+	t.Logf("resp=%v, err=%v", resp.Content.String(), err)
+}
+
 func Test_ProxyGet(t *testing.T) {
 	sess := New(
 		Header("a", "b"),
@@ -77,18 +95,15 @@ func Test_PostBody(t *testing.T) {
 
 		Body(`{"body":"QWER"}`),
 		Header("hello", "world"),
-		//TraceLv(9),
 		Logf(func(ctx context.Context, stat *Stat) {
-			//t.Logf("%v", stat.String())
+			t.Logf("%v", stat.String())
 		}),
 	)
 	if err != nil {
 		t.Logf("%v", err)
 		return
 	}
-	t.Log(resp.StatusCode, err, resp.Response.ContentLength, resp.Request.ContentLength)
-	//t.Log(resp.Text())
-	//t.Log(resp.Stat())
+	t.Log(resp.StatusCode, err, resp.Content.String(), resp.Request.ContentLength)
 }
 
 func Test_FormPost(t *testing.T) {
@@ -105,14 +120,12 @@ func Test_FormPost(t *testing.T) {
 			"d": "dddd",
 		}),
 		Param("e", "ea", "es"),
-
-		//TraceLv(9),
 	)
 	if err != nil {
 		t.Fatal(err)
 		return
 	}
-	t.Log(resp.StatusCode, err, resp.Response.ContentLength, resp.Request.ContentLength)
+	t.Log(resp.StatusCode, err, resp.Content.String(), resp.Request.ContentLength)
 
 }
 
@@ -144,7 +157,7 @@ func Test_Retry(t *testing.T) {
 	defer s.Close()
 
 	sess := New()
-	_, _ = sess.DoRequest(context.Background(), URL(s.URL))
+	_, _ = sess.DoRequest(context.Background(), URL(s.URL), Trace())
 }
 
 func Test_Cannel(t *testing.T) {
@@ -155,7 +168,7 @@ func Test_Cannel(t *testing.T) {
 	t.Logf("%s, err=%v", resp.Stat(), err)
 }
 
-func TestResponse_Download(t *testing.T) {
+func TestDownload(t *testing.T) {
 	if err := os.MkdirAll("tmp", 0755); err != nil {
 		t.Fatalf("Failed to create tmp directory: %v", err)
 	}

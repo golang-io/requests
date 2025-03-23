@@ -26,7 +26,7 @@ jobs:
     - name: Benchmark
       run: go test -race -run=^$ -bench=. -benchmem ./...
     - name: Test
-      run: go test -v -race -coverprofile=coverage.txt ./...
+      run: go test -v -race -coverprofile=coverage.txt ./... && go tool cover -html=coverage.txt -o coverage.html
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
       with:
