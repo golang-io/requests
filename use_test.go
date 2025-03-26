@@ -229,13 +229,32 @@ func TestPrintHandler(t *testing.T) {
 	}
 }
 
+func requestIdMiddle() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 从请求头中获取 request-id
+			requestId := GenId(r.Header.Get("request-id"))
+			// 将 request-id 添加到响应头
+			r.Header.Set("request-id", requestId)
+			w.Header().Set("request-id", requestId)
+			// 调用下一个处理器
+			// 定义请求ID的上下文键类型
+			type requestIDKey struct{}
+
+			// 使用自定义类型作为上下文键
+			r2 := r.WithContext(context.WithValue(r.Context(), requestIDKey{}, requestId))
+			next.ServeHTTP(w, r2)
+		})
+	}
+}
+
 func Test_SSE(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	r := NewServeMux(Logf(LogS))
+	r := NewServeMux(Logf(LogS), Use(requestIdMiddle()))
 	r.Route("/123", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte("hello world"))
-	})
+	}, Method("PUT"))
 	r.Route("/sse", func(w http.ResponseWriter, r *http.Request) {
 
 		for i := 0; i < 3; i++ {
@@ -246,7 +265,7 @@ func Test_SSE(t *testing.T) {
 				w.Write([]byte(fmt.Sprintf(`{"a":"12345\n", "b": %d}`, i)))
 			}
 		}
-	}, Use(SSE()))
+	}, Use(SSE()), Method("DELETE"))
 	s := NewServer(ctx, r, URL("http://0.0.0.0:1234"))
 	go s.ListenAndServe()
 	time.Sleep(1 * time.Second)
@@ -281,4 +300,39 @@ func SSERound(i int64, b []byte, f func([]byte) error) error {
 	default:
 		return nil
 	}
+}
+
+func Test_UseStep(t *testing.T) {
+	var ss []string
+	var use = func(stage, step string) func(next http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ss = append(ss, fmt.Sprintf("%s-%s-start", stage, step))
+				t.Logf("use: %s-%s-start", stage, step)
+				next.ServeHTTP(w, r)
+				ss = append(ss, fmt.Sprintf("%s-%s-end", stage, step))
+				t.Logf("use: %s-%s-end", stage, step)
+			})
+		}
+	}
+
+	mux := NewServeMux(
+		Use(requestIdMiddle()),
+		Logf(func(ctx context.Context, stat *Stat) {
+			t.Logf("mux: Logf: %v", ctx.Value("request-id"))
+		}),
+		Use(use("mux", "1")),
+		Use(use("mux", "2")),
+		Use(use("mux", "3")),
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mux.Route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hello world"))
+	}, Use(use("route", "1"), use("route", "2"), use("route", "3")))
+	server := NewServer(ctx, mux, URL("http://0.0.0.0:9090"), Use(use("server", "1"), use("server", "2"), use("server", "3")))
+	go server.ListenAndServe()
+
+	Get("http://127.0.0.1:9090/")
+	time.Sleep(1 * time.Second)
 }

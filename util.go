@@ -37,7 +37,7 @@ func CopyBody(b io.ReadCloser) (*bytes.Buffer, io.ReadCloser, error) {
 }
 
 // LogS supply default handle Stat, print to stdout.
-func LogS(_ context.Context, stat *Stat) {
+func LogS(ctx context.Context, stat *Stat) {
 	if stat.Response.URL == "" {
 		_, _ = fmt.Printf("%s\n", stat)
 		return

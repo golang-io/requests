@@ -86,9 +86,8 @@ func (s *Session) RoundTripper(opts ...Option) http.RoundTripper {
 		if options.Transport == nil {
 			options.Transport = RoundTripperFunc(s.client.Do)
 		}
-		// Apply middleware in reverse order
-		for i := len(options.HttpRoundTripper) - 1; i >= 0; i-- {
-			options.Transport = options.HttpRoundTripper[i](options.Transport)
+		for _, tr := range options.HttpRoundTripper {
+			options.Transport = tr(options.Transport)
 		}
 		return options.Transport.RoundTrip(r)
 	})
