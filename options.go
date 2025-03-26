@@ -49,7 +49,6 @@ type Option func(*Options)
 func newOptions(opts []Option, extends ...Option) Options {
 	opt := Options{
 		URL:      "http://127.0.0.1:80",
-		Method:   "GET",
 		RawQuery: make(url.Values),
 		Header:   make(http.Header),
 		Timeout:  30 * time.Second,
@@ -268,7 +267,9 @@ func Proxy(addr string) Option {
 // Setup is used for client middleware
 func Setup(fn ...func(tripper http.RoundTripper) http.RoundTripper) Option {
 	return func(o *Options) {
-		o.HttpRoundTripper = append(o.HttpRoundTripper, fn...)
+		for _, f := range fn {
+			o.HttpRoundTripper = append([]func(http.RoundTripper) http.RoundTripper{f}, o.HttpRoundTripper...)
+		}
 	}
 }
 
@@ -288,11 +289,12 @@ func RoundTripper(tr http.RoundTripper) Option {
 	}
 }
 
-// Logf must be used as a first option.
+// Logf xxx
 func Logf(f func(context.Context, *Stat)) Option {
 	return func(o *Options) {
 		o.HttpRoundTripper = append([]func(http.RoundTripper) http.RoundTripper{printRoundTripper(f)}, o.HttpRoundTripper...)
-		o.HttpHandler = append(o.HttpHandler, printHandler(f))
+		o.HttpHandler = append([]func(http.Handler) http.Handler{printHandler(f)}, o.HttpHandler...)
+
 	}
 }
 

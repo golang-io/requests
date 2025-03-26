@@ -153,6 +153,11 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	current := mux.root.Find(strings.TrimLeft(r.URL.Path, "/"))
 	handler, options := current.handler, newOptions(mux.opts, current.opts...)
+
+	if options.Method != "" && r.Method != options.Method {
+		handler = ErrHandler(http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	}
+
 	for _, h := range options.HttpHandler {
 		handler = h(handler)
 	}
