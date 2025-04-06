@@ -3,7 +3,6 @@ package requests
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 )
@@ -49,7 +48,7 @@ func (s *Session) Do(ctx context.Context, opts ...Option) (*http.Response, error
 	options := newOptions(s.opts, opts...)
 	req, err := NewRequestWithContext(ctx, options)
 	if err != nil {
-		return &http.Response{}, fmt.Errorf("newRequest: %w", err)
+		return &http.Response{}, err
 	}
 	return s.RoundTripper(opts...).RoundTrip(req)
 }

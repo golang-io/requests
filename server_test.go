@@ -514,7 +514,7 @@ func generateTestCert(certFile, keyFile string) error {
 		return err
 	}
 	defer certOut.Close()
-	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+	if err = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
 		return err
 	}
 

@@ -49,18 +49,7 @@ func newTransport(opts ...Option) *http.Transport {
 				}
 				network, addr = u.Scheme, u.Path
 			}
-
-			// Configure dialer parameters
-			dialer := net.Dialer{
-				Timeout:   10 * time.Second,  // TCP connection timeout
-				KeepAlive: 60 * time.Second,  // TCP keepalive interval
-				LocalAddr: options.LocalAddr, // Local address binding
-				Resolver: &net.Resolver{ // DNS resolver configuration
-					PreferGo:     true,  // Prefer Go's DNS resolver
-					StrictErrors: false, // Tolerate DNS resolution errors
-				},
-			}
-			return dialer.DialContext(ctx, network, addr)
+			return socket(ctx, options.LocalAddr, network, addr, 10*time.Second)
 		},
 
 		// Connection pool configuration

@@ -189,9 +189,9 @@ func TestDownload(t *testing.T) {
 		return
 	}
 	defer f.Close()
-	sum := 0
+	sum, cnt := 0, 0
 	_ = Stream(func(i int64, row []byte) error {
-		cnt, err := f.Write(row)
+		cnt, err = f.Write(row)
 		sum += cnt
 		return err
 	})

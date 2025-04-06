@@ -99,6 +99,16 @@ func TestNewTransport(t *testing.T) {
 			},
 		},
 		{
+			name: "Unix套接字",
+			opts: []Option{URL("unix://:::")},
+			test: func(t *testing.T, tr *http.Transport) {
+				_, err := tr.DialContext(context.Background(), "unix", ":::")
+				if err == nil {
+					t.Error("期望Unix套接字连接失败")
+				}
+			},
+		},
+		{
 			name: "TLS配置",
 			opts: []Option{Verify(false)},
 			test: func(t *testing.T, tr *http.Transport) {
