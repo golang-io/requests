@@ -112,8 +112,8 @@ func TestSocket_ContextCancel(t *testing.T) {
 	defer listener.Close()
 	// 在后台接受连接
 	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
+		conn, err2 := listener.Accept()
+		if err2 != nil {
 			return
 		}
 		defer conn.Close()

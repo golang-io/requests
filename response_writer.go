@@ -22,7 +22,7 @@ type ResponseWriter struct {
 
 // newResponseWriter 创建一个新的 ResponseWriter
 func newResponseWriter(w http.ResponseWriter) *ResponseWriter {
-	return &ResponseWriter{ResponseWriter: w, Content: &bytes.Buffer{}}
+	return &ResponseWriter{ResponseWriter: w, StatusCode: 200, Content: &bytes.Buffer{}}
 }
 
 // WriteHeader 设置 HTTP 响应状态码
@@ -60,6 +60,8 @@ func (w *ResponseWriter) Read(b []byte) (int, error) {
 // Flush 实现 http.Flusher 接口
 // 将缓冲的数据立即发送到客户端
 func (w *ResponseWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.wroteHeader = true
 	w.ResponseWriter.(http.Flusher).Flush()
 }
@@ -67,12 +69,16 @@ func (w *ResponseWriter) Flush() {
 // Push 实现 http.Pusher 接口
 // 支持 HTTP/2 服务器推送功能
 func (w *ResponseWriter) Push(target string, opts *http.PushOptions) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.ResponseWriter.(http.Pusher).Push(target, opts)
 }
 
 // Hijack 实现 http.Hijacker 接口
 // 允许接管 HTTP 连接
 func (w *ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	hj := w.ResponseWriter.(http.Hijacker)
 	return hj.Hijack()
 }
