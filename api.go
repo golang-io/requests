@@ -21,7 +21,7 @@ func Post(url string, contentType string, body io.Reader) (*http.Response, error
 }
 
 // PUT send put request
-func PUT(url, contentType string, body io.Reader) (*http.Response, error) {
+func Put(url, contentType string, body io.Reader) (*http.Response, error) {
 	return session.Do(context.TODO(), Method("PUT"), URL(url), Header("Content-Type", contentType), Body(body))
 }
 

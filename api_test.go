@@ -92,7 +92,7 @@ func TestPUT(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader(`{"key":"updated"}`)
-	resp, err := PUT(server.URL+"/put", "application/json", body)
+	resp, err := Put(server.URL+"/put", "application/json", body)
 	if err != nil {
 		t.Fatalf("PUT 请求失败: %v", err)
 	}

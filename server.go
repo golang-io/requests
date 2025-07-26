@@ -27,15 +27,16 @@ func WarpHandler(next http.Handler) func(http.Handler) http.Handler {
 
 // Node trie node
 type Node struct {
-	path    string
-	handler http.Handler
+	path string
+	// handler http.Handler
 	opts    []Option
 	next    map[string]*Node
+	methods map[string]http.Handler
 }
 
 // NewNode new
 func NewNode(path string, h http.Handler, opts ...Option) *Node {
-	return &Node{path: path, handler: h, opts: opts, next: make(map[string]*Node)}
+	return &Node{path: path, opts: opts, next: make(map[string]*Node), methods: make(map[string]http.Handler)}
 }
 
 // Add node
@@ -44,18 +45,20 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 		panic("path is empty")
 	}
 
+	options := newOptions(opts)
+
 	if path == "/" {
-		node.handler, node.opts = h, opts
+		node.methods[options.Method], node.opts = h, opts
 		return
 	}
 	current := node
 	for _, p := range strings.Split(path[1:], "/") {
 		if _, ok := current.next[p]; !ok {
-			current.next[p] = NewNode(p, http.NotFoundHandler())
+			current.next[p] = NewNode(p, http.NotFoundHandler(), opts...)
 		}
 		current = current.next[p]
 	}
-	current.handler, current.opts = h, opts
+	current.methods[options.Method], current.opts = h, opts
 }
 
 // Find 按照最长的匹配原则，/a/b/c/会优先返回/a/b/c/,其次返回/a/b/c，再返回/a/b，再返回/a，再返回/
@@ -86,7 +89,9 @@ func (node *Node) Print() {
 
 func (node *Node) print(m int) {
 	paths := node.paths()
-	fmt.Printf("%spath=%s, handler=%v, next=%#v\n", strings.Repeat("    ", m), node.path, node.handler, paths)
+	for method, handler := range node.methods {
+		fmt.Printf("%spath=%s, method=%s, handler=%v, next=%#v\n", strings.Repeat("    ", m), node.path, method, handler, paths)
+	}
 	for _, p := range paths {
 		node.next[p].print(m + 1)
 	}
@@ -136,6 +141,38 @@ func (mux *ServeMux) Route(path string, v any, opts ...Option) {
 	}
 }
 
+func (mux *ServeMux) GET(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("GET"))...)
+}
+
+func (mux *ServeMux) POST(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("POST"))...)
+}
+
+func (mux *ServeMux) PUT(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("PUT"))...)
+}
+
+func (mux *ServeMux) DELETE(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("DELETE"))...)
+}
+
+func (mux *ServeMux) OPTIONS(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("OPTIONS"))...)
+}
+
+func (mux *ServeMux) HEAD(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("HEAD"))...)
+}
+
+func (mux *ServeMux) CONNECT(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("CONNECT"))...)
+}
+
+func (mux *ServeMux) TRACE(path string, v any, opts ...Option) {
+	mux.Route(path, v, append(opts, Method("TRACE"))...)
+}
+
 // Redirect set redirect path to handle
 func (mux *ServeMux) Redirect(source, target string) {
 	mux.Route(source, http.RedirectHandler(target, http.StatusMovedPermanently).ServeHTTP)
@@ -152,10 +189,17 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 // 最后处理中间件`func(next http.Handler) http.Handler`
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	current := mux.root.Find(strings.TrimLeft(r.URL.Path, "/"))
-	handler, options := current.handler, newOptions(mux.opts, current.opts...)
+	options := newOptions(mux.opts, current.opts...)
 
-	if options.Method != "" && r.Method != options.Method {
-		handler = ErrHandler(http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	var handler http.Handler
+	if len(current.methods) == 0 {
+		handler = ErrHandler(http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	} else {
+		if handler = current.methods[r.Method]; handler == nil {
+			if handler = current.methods[""]; handler == nil {
+				handler = ErrHandler(http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			}
+		}
 	}
 
 	for _, h := range options.HttpHandler {
