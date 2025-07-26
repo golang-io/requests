@@ -78,8 +78,8 @@ func TestServeMux_Middleware(t *testing.T) {
 		order = append(order, "handler")
 		w.Write([]byte("ok"))
 	}, Use(middleware("m3")))
-	mux.Route("/test_HandlerFunc", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	mux.Route("/test_Handler", http.RedirectHandler("/test_Handler", http.StatusMovedPermanently), Use(middleware("m4")))
+	// mux.Route("/test_HandlerFunc", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	// mux.Route("/test_Handler", http.RedirectHandler("/test_Handler", http.StatusMovedPermanently), Use(middleware("m4")))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/test", nil)
 	mux.ServeHTTP(rec, req)
@@ -340,7 +340,7 @@ func TestNode_RootPath(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	node.Add("/", handler)
 
-	if node.handler == nil {
+	if node.methods[""] == nil {
 		t.Error("根路径处理器未正确设置")
 	}
 }
@@ -565,4 +565,360 @@ func TestNode_PathsAndPrint(t *testing.T) {
 	// 测试打印功能
 	// 因为打印到标准输出，这里只验证不会 panic
 	node.Print()
+}
+
+func Test_Methods(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupMux       func(*ServeMux)
+		requestMethod  string
+		requestPath    string
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name: "GET方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("GET ok"))
+				})
+			},
+			requestMethod:  "GET",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "GET ok",
+		},
+		{
+			name: "POST方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.POST("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("POST ok"))
+				})
+			},
+			requestMethod:  "POST",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "POST ok",
+		},
+		{
+			name: "PUT方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.PUT("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("PUT ok"))
+				})
+			},
+			requestMethod:  "PUT",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "PUT ok",
+		},
+		{
+			name: "DELETE方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.DELETE("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("DELETE ok"))
+				})
+			},
+			requestMethod:  "DELETE",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "DELETE ok",
+		},
+		{
+			name: "OPTIONS方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.OPTIONS("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("OPTIONS ok"))
+				})
+			},
+			requestMethod:  "OPTIONS",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "OPTIONS ok",
+		},
+		{
+			name: "HEAD方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.HEAD("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("HEAD ok"))
+				})
+			},
+			requestMethod:  "HEAD",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "HEAD ok",
+		},
+		{
+			name: "CONNECT方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.CONNECT("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("CONNECT ok"))
+				})
+			},
+			requestMethod:  "CONNECT",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "CONNECT ok",
+		},
+		{
+			name: "TRACE方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.TRACE("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("TRACE ok"))
+				})
+			},
+			requestMethod:  "TRACE",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "TRACE ok",
+		},
+		{
+			name: "方法不匹配返回405",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("GET ok"))
+				})
+			},
+			requestMethod:  "POST",
+			requestPath:    "/test",
+			expectedStatus: http.StatusMethodNotAllowed,
+			expectedBody:   "Method Not Allowed\n",
+		},
+		{
+			name: "路径不存在返回404",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("GET ok"))
+				})
+			},
+			requestMethod:  "GET",
+			requestPath:    "/notfound",
+			expectedStatus: http.StatusNotFound,
+			expectedBody:   "Not Found\n",
+		},
+		{
+			name: "使用Method选项限制",
+			setupMux: func(mux *ServeMux) {
+				mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("Method option ok"))
+				}, Method("PATCH"))
+			},
+			requestMethod:  "PATCH",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "Method option ok",
+		},
+		{
+			name: "Method选项不匹配",
+			setupMux: func(mux *ServeMux) {
+				mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("Method option ok"))
+				}, Method("PATCH"))
+			},
+			requestMethod:  "GET",
+			requestPath:    "/test",
+			expectedStatus: http.StatusMethodNotAllowed,
+			expectedBody:   "Method Not Allowed\n",
+		},
+		{
+			name: "多个方法支持",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("GET ok"))
+				})
+				mux.POST("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("POST ok"))
+				})
+			},
+			requestMethod:  "POST",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "POST ok",
+		},
+		{
+			name: "根路径方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("root GET ok"))
+				})
+			},
+			requestMethod:  "GET",
+			requestPath:    "/",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "root GET ok",
+		},
+		{
+			name: "根路径方法不匹配",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("root GET ok"))
+				})
+			},
+			requestMethod:  "POST",
+			requestPath:    "/",
+			expectedStatus: http.StatusMethodNotAllowed,
+			expectedBody:   "Method Not Allowed\n",
+		},
+		{
+			name: "嵌套路径方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("nested GET ok"))
+				})
+			},
+			requestMethod:  "GET",
+			requestPath:    "/api/v1/users",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "nested GET ok",
+		},
+		{
+			name: "嵌套路径方法不匹配",
+			setupMux: func(mux *ServeMux) {
+				mux.GET("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("nested GET ok"))
+				})
+			},
+			requestMethod:  "PUT",
+			requestPath:    "/api/v1/users",
+			expectedStatus: http.StatusMethodNotAllowed,
+			expectedBody:   "Method Not Allowed\n",
+		},
+		{
+			name: "使用Route方法设置方法限制",
+			setupMux: func(mux *ServeMux) {
+				mux.Route("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("Route method ok"))
+				}, Method("PUT"))
+			},
+			requestMethod:  "PUT",
+			requestPath:    "/test",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "Route method ok",
+		},
+		{
+			name: "Route方法设置的方法不匹配",
+			setupMux: func(mux *ServeMux) {
+				mux.Route("/test", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("Route method ok"))
+				}, Method("PUT"))
+			},
+			requestMethod:  "GET",
+			requestPath:    "/test",
+			expectedStatus: http.StatusMethodNotAllowed,
+			expectedBody:   "Method Not Allowed\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := NewServeMux()
+			tt.setupMux(mux)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.requestMethod, tt.requestPath, nil)
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tt.expectedStatus {
+				t.Errorf("期望状态码 %d, 得到 %d", tt.expectedStatus, rec.Code)
+			}
+
+			if rec.Body.String() != tt.expectedBody {
+				t.Errorf("期望响应体 %q, 得到 %q", tt.expectedBody, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestMethodRestriction_EdgeCases 测试方法限制的边缘情况
+func TestMethodRestriction_EdgeCases(t *testing.T) {
+	t.Run("空方法处理", func(t *testing.T) {
+		mux := NewServeMux()
+		mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("empty method ok"))
+		}, Method(""))
+
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/test", nil)
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("期望状态码 %d, 得到 %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "empty method ok" {
+			t.Errorf("期望响应体 %q, 得到 %q", "empty method ok", rec.Body.String())
+		}
+	})
+
+	t.Run("大小写不敏感方法匹配", func(t *testing.T) {
+		mux := NewServeMux()
+		mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("case insensitive ok"))
+		}, Method("get"))
+
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/test", nil)
+		mux.ServeHTTP(rec, req)
+
+		// 注意：HTTP方法匹配是大小写敏感的，所以这里应该返回405
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("期望状态码 %d, 得到 %d", http.StatusMethodNotAllowed, rec.Code)
+		}
+	})
+
+	t.Run("自定义HTTP方法", func(t *testing.T) {
+		mux := NewServeMux()
+		mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("custom method ok"))
+		}, Method("CUSTOM"))
+
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("CUSTOM", "/test", nil)
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("期望状态码 %d, 得到 %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "custom method ok" {
+			t.Errorf("期望响应体 %q, 得到 %q", "custom method ok", rec.Body.String())
+		}
+	})
+}
+
+// TestMethodRestriction_Performance 测试方法限制的性能
+func TestMethodRestriction_Performance(t *testing.T) {
+	mux := NewServeMux()
+
+	// 注册多个不同方法的处理器
+	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
+	for _, method := range methods {
+		method := method // 捕获变量
+		mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(method + " ok"))
+		}, Method(method))
+	}
+
+	// 并发测试
+	var wg sync.WaitGroup
+	concurrent := 50
+	wg.Add(concurrent)
+
+	for i := 0; i < concurrent; i++ {
+		go func() {
+			defer wg.Done()
+			for _, method := range methods {
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(method, "/test", nil)
+				mux.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusOK {
+					t.Errorf("方法 %s 期望状态码 %d, 得到 %d", method, http.StatusOK, rec.Code)
+				}
+				if rec.Body.String() != method+" ok" {
+					t.Errorf("方法 %s 期望响应体 %q, 得到 %q", method, method+" ok", rec.Body.String())
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }
