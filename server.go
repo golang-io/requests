@@ -231,7 +231,7 @@ func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 		mux = NewServeMux()
 	}
 	s.options = newOptions(mux.opts, opts...)
-
+	s.server.ReadTimeout, s.server.WriteTimeout = s.options.Timeout, s.options.Timeout
 	u, err := url.Parse(s.options.URL)
 	if err != nil {
 		panic(err)

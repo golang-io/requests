@@ -1,6 +1,7 @@
 # <center>requests</center>
 <div style="text-align: center;">
     <div><strong>Requests is a simple, yet elegant, Go HTTP client and server library for Humans™ ✨🍰✨</strong></div>
+	<a href="https://deepwiki.com/golang-io/requests"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
     <a href="https://pkg.go.dev/github.com/golang-io/requests"><img src="https://pkg.go.dev/badge/github.com/golang-io/requests.svg" alt="Go Reference"></a>
     <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/license-Apache%20V2-blue.svg" alt="Apache V2 License"></a>
     <a href="https://github.com/golang-io/requests/actions/workflows/go.yml"><img src="https://github.com/golang-io/requests/actions/workflows/go.yml/badge.svg?branch=main" alt="Build status"></a>

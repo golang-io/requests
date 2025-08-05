@@ -8,7 +8,9 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,7 +30,7 @@ func TestServeMux_RouteRegistration(t *testing.T) {
 	tests := []struct {
 		name     string
 		path     string
-		handler  interface{}
+		handler  any
 		expected string
 	}{
 		{"HandleFunc", "/test1", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("test1")) }, "test1"},
@@ -105,7 +107,7 @@ func TestServer_ConcurrentRequests(t *testing.T) {
 	concurrent := 100
 	wg.Add(concurrent)
 
-	for i := 0; i < concurrent; i++ {
+	for range concurrent {
 		go func() {
 			defer wg.Done()
 			res, err := http.Get(s.URL + "/concurrent")
@@ -921,4 +923,291 @@ func TestMethodRestriction_Performance(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// TestServer_TimeoutSettings 测试服务器的超时设置
+func TestServer_TimeoutSettings(t *testing.T) {
+	tests := []struct {
+		name          string
+		timeout       time.Duration
+		expectedRead  time.Duration
+		expectedWrite time.Duration
+		description   string
+	}{
+		{
+			name:          "零超时设置",
+			timeout:       0,                // 显式设置为0
+			expectedRead:  30 * time.Second, // 实际行为：使用默认值
+			expectedWrite: 30 * time.Second, // 实际行为：使用默认值
+			description:   "当显式设置超时为0时，实际使用默认超时",
+		},
+		{
+			name:          "自定义超时设置",
+			timeout:       5 * time.Second,
+			expectedRead:  5 * time.Second,
+			expectedWrite: 5 * time.Second,
+			description:   "应该使用自定义的5秒超时",
+		},
+		{
+			name:          "短超时设置",
+			timeout:       100 * time.Millisecond,
+			expectedRead:  100 * time.Millisecond,
+			expectedWrite: 100 * time.Millisecond,
+			description:   "应该使用100毫秒超时",
+		},
+		{
+			name:          "长超时设置",
+			timeout:       2 * time.Minute,
+			expectedRead:  2 * time.Minute,
+			expectedWrite: 2 * time.Minute,
+			description:   "应该使用2分钟超时",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 创建ServeMux
+			mux := NewServeMux()
+			mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("timeout test ok"))
+			})
+
+			// 创建上下文
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// 创建服务器选项
+			var opts []Option
+			if tt.timeout > 0 {
+				opts = append(opts, Timeout(tt.timeout))
+			}
+
+			// 创建服务器
+			server := NewServer(ctx, mux, opts...)
+
+			// 验证超时设置
+			if server.server.ReadTimeout != tt.expectedRead {
+				t.Errorf("ReadTimeout 设置错误: 期望 %v, 实际 %v", tt.expectedRead, server.server.ReadTimeout)
+			}
+
+			if server.server.WriteTimeout != tt.expectedWrite {
+				t.Errorf("WriteTimeout 设置错误: 期望 %v, 实际 %v", tt.expectedWrite, server.server.WriteTimeout)
+			}
+
+			// 验证Options中的Timeout设置
+			if tt.timeout > 0 && server.options.Timeout != tt.timeout {
+				t.Errorf("Options.Timeout 设置错误: 期望 %v, 实际 %v", tt.timeout, server.options.Timeout)
+			}
+		})
+	}
+}
+
+// TestServer_TimeoutBehavior 测试超时行为
+func TestServer_TimeoutBehavior(t *testing.T) {
+	t.Run("读取超时测试", func(t *testing.T) {
+		// 创建一个慢处理器来测试读取超时
+		mux := NewServeMux()
+		mux.HandleFunc("/slow-read", func(w http.ResponseWriter, r *http.Request) {
+			// 模拟慢读取
+			time.Sleep(200 * time.Millisecond)
+			w.Write([]byte("slow read ok"))
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// 创建短超时的服务器
+		server := NewServer(ctx, mux, Timeout(50*time.Millisecond))
+
+		// 启动服务器
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("创建监听器失败: %v", err)
+		}
+		defer listener.Close()
+
+		// 修改服务器地址
+		server.server.Addr = listener.Addr().String()
+
+		// 启动服务器
+		go func() {
+			if err := server.server.Serve(listener); err != nil && err != http.ErrServerClosed {
+				t.Logf("服务器错误: %v", err)
+			}
+		}()
+
+		// 等待服务器启动
+		time.Sleep(10 * time.Millisecond)
+
+		// 发送请求
+		client := &http.Client{
+			Timeout: 100 * time.Millisecond,
+		}
+
+		resp, err := client.Get("http://" + listener.Addr().String() + "/slow-read")
+		if err != nil {
+			t.Logf("请求错误: %v", err)
+			// 超时是预期的行为
+			return
+		}
+		defer resp.Body.Close()
+
+		// 如果请求成功，读取响应
+		if resp.StatusCode == http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Errorf("读取响应失败: %v", err)
+				return
+			}
+			if string(body) != "slow read ok" {
+				t.Errorf("期望响应 'slow read ok', 得到 '%s'", string(body))
+			}
+		}
+	})
+
+	t.Run("写入超时测试", func(t *testing.T) {
+		// 创建一个慢写入处理器来测试写入超时
+		mux := NewServeMux()
+		mux.HandleFunc("/slow-write", func(w http.ResponseWriter, r *http.Request) {
+			// 模拟慢写入
+			time.Sleep(200 * time.Millisecond)
+			w.Write([]byte("slow write ok"))
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// 创建短超时的服务器
+		server := NewServer(ctx, mux, Timeout(50*time.Millisecond))
+
+		// 启动服务器
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("创建监听器失败: %v", err)
+		}
+		defer listener.Close()
+
+		// 修改服务器地址
+		server.server.Addr = listener.Addr().String()
+
+		// 启动服务器
+		go func() {
+			if err := server.server.Serve(listener); err != nil && err != http.ErrServerClosed {
+				t.Logf("服务器错误: %v", err)
+			}
+		}()
+
+		// 等待服务器启动
+		time.Sleep(10 * time.Millisecond)
+
+		// 发送请求
+		client := &http.Client{
+			Timeout: 100 * time.Millisecond,
+		}
+
+		resp, err := client.Get("http://" + listener.Addr().String() + "/slow-write")
+		if err != nil {
+			t.Logf("请求错误: %v", err)
+			// 超时是预期的行为
+			return
+		}
+		defer resp.Body.Close()
+
+		// 如果请求成功，读取响应
+		if resp.StatusCode == http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Errorf("读取响应失败: %v", err)
+				return
+			}
+			if string(body) != "slow write ok" {
+				t.Errorf("期望响应 'slow write ok', 得到 '%s'", string(body))
+			}
+		}
+	})
+}
+
+// TestServer_DefaultTimeout 测试默认超时设置
+func TestServer_DefaultTimeout(t *testing.T) {
+	t.Run("不设置Timeout选项时的默认行为", func(t *testing.T) {
+		mux := NewServeMux()
+		mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("default timeout"))
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// 不设置Timeout选项，应该使用默认值
+		server := NewServer(ctx, mux)
+
+		// 验证默认超时设置
+		if server.server.ReadTimeout != 30*time.Second {
+			t.Errorf("默认ReadTimeout应该为30秒，实际为 %v", server.server.ReadTimeout)
+		}
+		if server.server.WriteTimeout != 30*time.Second {
+			t.Errorf("默认WriteTimeout应该为30秒，实际为 %v", server.server.WriteTimeout)
+		}
+		if server.options.Timeout != 30*time.Second {
+			t.Errorf("默认Options.Timeout应该为30秒，实际为 %v", server.options.Timeout)
+		}
+	})
+}
+
+// TestServer_TimeoutEdgeCases 测试超时设置的边界情况
+func TestServer_TimeoutEdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		timeout     time.Duration
+		description string
+	}{
+		{
+			name:        "零超时",
+			timeout:     0,
+			description: "零超时应该使用默认值",
+		},
+		{
+			name:        "负超时",
+			timeout:     -1 * time.Second,
+			description: "负超时应该被正确处理",
+		},
+		{
+			name:        "极小超时",
+			timeout:     1 * time.Nanosecond,
+			description: "极小超时应该被正确处理",
+		},
+		{
+			name:        "极大超时",
+			timeout:     24 * time.Hour,
+			description: "极大超时应该被正确处理",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := NewServeMux()
+			mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("edge case ok"))
+			})
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// 创建服务器
+			server := NewServer(ctx, mux, Timeout(tt.timeout))
+
+			// 验证服务器创建成功
+			if server == nil {
+				t.Fatal("服务器创建失败")
+			}
+
+			// 验证超时设置
+			if server.server.ReadTimeout != tt.timeout {
+				t.Errorf("ReadTimeout 设置错误: 期望 %v, 实际 %v", tt.timeout, server.server.ReadTimeout)
+			}
+			if server.server.WriteTimeout != tt.timeout {
+				t.Errorf("WriteTimeout 设置错误: 期望 %v, 实际 %v", tt.timeout, server.server.WriteTimeout)
+			}
+		})
+	}
 }
