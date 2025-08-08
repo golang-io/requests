@@ -45,8 +45,17 @@ type Stat struct {
 
 // String implement fmt.Stringer interface.
 func (stat *Stat) String() string {
-	b, _ := json.Marshal(stat)
-	return string(b)
+	return a2s(stat)
+}
+
+// RequestBody return request body as string
+func (stat *Stat) RequestBody() string {
+	return a2s(stat.Request.Body)
+}
+
+// ResponseBody return response body as string
+func (stat *Stat) ResponseBody() string {
+	return a2s(stat.Response.Body)
 }
 
 // Print is used for server side
@@ -159,4 +168,12 @@ func serveLoad(w *ResponseWriter, r *http.Request, start time.Time, buf *bytes.B
 	}
 	stat.Response.Body = w.Content.String()
 	return stat
+}
+
+func a2s(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	return string(b)
 }

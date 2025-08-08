@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -174,4 +175,383 @@ func TestStat_WithError(t *testing.T) {
 	if stat.Err != "测试错误" {
 		t.Errorf("期望错误信息为 '测试错误'，实际为 '%s'", stat.Err)
 	}
+}
+
+// TestStat_RequestBody 测试RequestBody方法
+func TestStat_RequestBody(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     any
+		expected string
+		desc     string
+	}{
+		{
+			name:     "nil_body",
+			body:     nil,
+			expected: "null",
+			desc:     "nil body应该返回null字符串",
+		},
+		{
+			name:     "string_body",
+			body:     "hello world",
+			expected: `"hello world"`,
+			desc:     "字符串body应该正确序列化",
+		},
+		{
+			name:     "map_body",
+			body:     map[string]any{"key": "value", "number": 123},
+			expected: `{"key":"value","number":123}`,
+			desc:     "map body应该正确序列化为JSON",
+		},
+		{
+			name:     "slice_body",
+			body:     []string{"a", "b", "c"},
+			expected: `["a","b","c"]`,
+			desc:     "slice body应该正确序列化为JSON",
+		},
+		{
+			name:     "number_body",
+			body:     42,
+			expected: "42",
+			desc:     "数字body应该正确序列化",
+		},
+		{
+			name:     "boolean_body",
+			body:     true,
+			expected: "true",
+			desc:     "布尔值body应该正确序列化",
+		},
+		{
+			name: "struct_body",
+			body: struct {
+				Name string
+				Age  int
+			}{"Alice", 30},
+			expected: `{"Name":"Alice","Age":30}`,
+			desc:     "结构体body应该正确序列化为JSON",
+		},
+		{
+			name:     "empty_map",
+			body:     map[string]any{},
+			expected: "{}",
+			desc:     "空map应该序列化为空JSON对象",
+		},
+		{
+			name:     "empty_slice",
+			body:     []any{},
+			expected: "[]",
+			desc:     "空slice应该序列化为空JSON数组",
+		},
+		{
+			name: "nested_structure",
+			body: map[string]any{
+				"user": map[string]any{
+					"name": "Bob",
+					"age":  25,
+					"hobbies": []string{
+						"reading",
+						"swimming",
+					},
+				},
+				"active": true,
+			},
+			expected: `{"user":{"age":25,"hobbies":["reading","swimming"],"name":"Bob"},"active":true}`,
+			desc:     "嵌套结构应该正确序列化",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stat := &Stat{}
+			stat.Request.Body = tt.body
+
+			result := stat.RequestBody()
+
+			// 对于可以JSON序列化的数据，验证JSON格式
+			if tt.body != nil {
+				// 尝试解析结果是否为有效JSON
+				var parsed any
+				if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+					// 如果不是有效JSON，检查是否为fmt.Sprintf的输出
+					expectedFallback := fmt.Sprintf("%v", tt.body)
+					if result != expectedFallback {
+						t.Errorf("测试 '%s': 期望 '%s' 或 '%s'，实际为 '%s'",
+							tt.name, tt.expected, expectedFallback, result)
+					}
+				} else {
+					// 如果是有效JSON，验证内容（不依赖字段顺序）
+					var expectedParsed any
+					if err := json.Unmarshal([]byte(tt.expected), &expectedParsed); err != nil {
+						t.Errorf("测试 '%s': 期望值不是有效JSON: %v", tt.name, err)
+					} else {
+						// 比较解析后的JSON对象
+						if !reflect.DeepEqual(parsed, expectedParsed) {
+							t.Errorf("测试 '%s': JSON内容不匹配，期望 %v，实际 %v",
+								tt.name, expectedParsed, parsed)
+						}
+					}
+				}
+			} else {
+				// 对于nil，应该返回"null"
+				if result != tt.expected {
+					t.Errorf("测试 '%s': 期望 '%s'，实际为 '%s'",
+						tt.name, tt.expected, result)
+				}
+			}
+		})
+	}
+}
+
+// TestStat_ResponseBody 测试ResponseBody方法
+func TestStat_ResponseBody(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     any
+		expected string
+		desc     string
+	}{
+		{
+			name:     "nil_body",
+			body:     nil,
+			expected: "null",
+			desc:     "nil body应该返回null字符串",
+		},
+		{
+			name:     "string_body",
+			body:     "response data",
+			expected: `"response data"`,
+			desc:     "字符串body应该正确序列化",
+		},
+		{
+			name:     "map_body",
+			body:     map[string]any{"status": "success", "data": "test"},
+			expected: `{"data":"test","status":"success"}`,
+			desc:     "map body应该正确序列化为JSON",
+		},
+		{
+			name:     "slice_body",
+			body:     []int{1, 2, 3, 4, 5},
+			expected: `[1,2,3,4,5]`,
+			desc:     "slice body应该正确序列化为JSON",
+		},
+		{
+			name:     "number_body",
+			body:     3.14159,
+			expected: "3.14159",
+			desc:     "浮点数body应该正确序列化",
+		},
+		{
+			name:     "boolean_body",
+			body:     false,
+			expected: "false",
+			desc:     "布尔值body应该正确序列化",
+		},
+		{
+			name: "struct_body",
+			body: struct {
+				Message string
+				Code    int
+			}{"OK", 200},
+			expected: `{"Code":200,"Message":"OK"}`,
+			desc:     "结构体body应该正确序列化为JSON",
+		},
+		{
+			name:     "empty_map",
+			body:     map[string]any{},
+			expected: "{}",
+			desc:     "空map应该序列化为空JSON对象",
+		},
+		{
+			name:     "empty_slice",
+			body:     []any{},
+			expected: "[]",
+			desc:     "空slice应该序列化为空JSON数组",
+		},
+		{
+			name: "complex_nested_structure",
+			body: map[string]any{
+				"api": map[string]any{
+					"version": "1.0",
+					"endpoints": []map[string]any{
+						{"name": "users", "method": "GET"},
+						{"name": "posts", "method": "POST"},
+					},
+				},
+				"timestamp": "2023-05-01T12:00:00Z",
+			},
+			expected: `{"api":{"endpoints":[{"method":"GET","name":"users"},{"method":"POST","name":"posts"}],"version":"1.0"},"timestamp":"2023-05-01T12:00:00Z"}`,
+			desc:     "复杂嵌套结构应该正确序列化",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stat := &Stat{}
+			stat.Response.Body = tt.body
+
+			result := stat.ResponseBody()
+
+			// 对于可以JSON序列化的数据，验证JSON格式
+			if tt.body != nil {
+				// 尝试解析结果是否为有效JSON
+				var parsed any
+				if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+					// 如果不是有效JSON，检查是否为fmt.Sprintf的输出
+					expectedFallback := fmt.Sprintf("%v", tt.body)
+					if result != expectedFallback {
+						t.Errorf("测试 '%s': 期望 '%s' 或 '%s'，实际为 '%s'",
+							tt.name, tt.expected, expectedFallback, result)
+					}
+				} else {
+					// 如果是有效JSON，验证内容（不依赖字段顺序）
+					var expectedParsed any
+					if err := json.Unmarshal([]byte(tt.expected), &expectedParsed); err != nil {
+						t.Errorf("测试 '%s': 期望值不是有效JSON: %v", tt.name, err)
+					} else {
+						// 比较解析后的JSON对象
+						if !reflect.DeepEqual(parsed, expectedParsed) {
+							t.Errorf("测试 '%s': JSON内容不匹配，期望 %v，实际 %v",
+								tt.name, expectedParsed, parsed)
+						}
+					}
+				}
+			} else {
+				// 对于nil，应该返回"null"
+				if result != tt.expected {
+					t.Errorf("测试 '%s': 期望 '%s'，实际为 '%s'",
+						tt.name, tt.expected, result)
+				}
+			}
+		})
+	}
+}
+
+// TestStat_BodyMethods_EdgeCases 测试RequestBody和ResponseBody的边界情况
+func TestStat_BodyMethods_EdgeCases(t *testing.T) {
+	t.Run("RequestBody边界情况", func(t *testing.T) {
+		stat := &Stat{}
+
+		// 测试无法JSON序列化的类型
+		ch := make(chan int)
+		stat.Request.Body = ch
+		result := stat.RequestBody()
+		expected := fmt.Sprintf("%v", ch)
+		if result != expected {
+			t.Errorf("无法序列化的类型应该使用fmt.Sprintf，期望 '%s'，实际为 '%s'", expected, result)
+		}
+
+		// 测试函数类型
+		testFunc := func() {}
+		stat.Request.Body = testFunc
+		result = stat.RequestBody()
+		// 函数类型无法直接使用fmt.Sprintf，但RequestBody应该返回一个字符串表示
+		if result == "" {
+			t.Errorf("函数类型应该返回非空字符串，实际为空")
+		}
+
+		// 测试循环引用
+		type CircularRef struct {
+			Self *CircularRef
+		}
+		circular := &CircularRef{}
+		circular.Self = circular
+		stat.Request.Body = circular
+		result = stat.RequestBody()
+		expected = fmt.Sprintf("%v", circular)
+		if result != expected {
+			t.Errorf("循环引用应该使用fmt.Sprintf，期望 '%s'，实际为 '%s'", expected, result)
+		}
+	})
+
+	t.Run("ResponseBody边界情况", func(t *testing.T) {
+		stat := &Stat{}
+
+		// 测试无法JSON序列化的类型
+		ch := make(chan string)
+		stat.Response.Body = ch
+		result := stat.ResponseBody()
+		expected := fmt.Sprintf("%v", ch)
+		if result != expected {
+			t.Errorf("无法序列化的类型应该使用fmt.Sprintf，期望 '%s'，实际为 '%s'", expected, result)
+		}
+
+		// 测试接口类型
+		var iface any = "interface value"
+		stat.Response.Body = iface
+		result = stat.ResponseBody()
+		expected = `"interface value"`
+		if result != expected {
+			t.Errorf("接口类型应该正确序列化，期望 '%s'，实际为 '%s'", expected, result)
+		}
+
+		// 测试指针类型
+		str := "pointer value"
+		stat.Response.Body = &str
+		result = stat.ResponseBody()
+		expected = `"pointer value"`
+		if result != expected {
+			t.Errorf("指针类型应该正确序列化，期望 '%s'，实际为 '%s'", expected, result)
+		}
+	})
+}
+
+// TestStat_BodyMethods_Integration 测试RequestBody和ResponseBody的集成场景
+func TestStat_BodyMethods_Integration(t *testing.T) {
+	t.Run("完整Stat对象的RequestBody和ResponseBody", func(t *testing.T) {
+		stat := &Stat{
+			RequestId: "test-integration",
+			StartAt:   "2023-05-01 12:00:00.000",
+			Cost:      150,
+		}
+
+		// 设置请求数据
+		stat.Request.Method = "POST"
+		stat.Request.URL = "http://example.com/api/users"
+		stat.Request.Header = map[string]string{
+			"Content-Type":  "application/json",
+			"Authorization": "Bearer token123",
+		}
+		stat.Request.Body = map[string]any{
+			"name":  "John Doe",
+			"email": "john@example.com",
+			"age":   30,
+		}
+
+		// 设置响应数据
+		stat.Response.StatusCode = 201
+		stat.Response.ContentLength = 256
+		stat.Response.Header = map[string]string{
+			"Content-Type": "application/json",
+			"Location":     "http://example.com/api/users/123",
+		}
+		stat.Response.Body = map[string]any{
+			"id":      123,
+			"name":    "John Doe",
+			"email":   "john@example.com",
+			"created": "2023-05-01T12:00:00Z",
+		}
+
+		// 测试RequestBody
+		requestBody := stat.RequestBody()
+		expectedRequestBody := `{"age":30,"email":"john@example.com","name":"John Doe"}`
+		if requestBody != expectedRequestBody {
+			t.Errorf("RequestBody集成测试失败，期望 '%s'，实际为 '%s'", expectedRequestBody, requestBody)
+		}
+
+		// 测试ResponseBody
+		responseBody := stat.ResponseBody()
+		expectedResponseBody := `{"created":"2023-05-01T12:00:00Z","email":"john@example.com","id":123,"name":"John Doe"}`
+		if responseBody != expectedResponseBody {
+			t.Errorf("ResponseBody集成测试失败，期望 '%s'，实际为 '%s'", expectedResponseBody, responseBody)
+		}
+
+		// 验证String方法包含正确的body信息
+		jsonStr := stat.String()
+		if !strings.Contains(jsonStr, expectedRequestBody) {
+			t.Errorf("String方法应该包含正确的RequestBody，但未找到期望的内容")
+		}
+		if !strings.Contains(jsonStr, expectedResponseBody) {
+			t.Errorf("String方法应该包含正确的ResponseBody，但未找到期望的内容")
+		}
+	})
 }

@@ -260,7 +260,7 @@ func Test_Use(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/test", nil)
 	mux.ServeHTTP(rec, req)
-	mux.Print()
+	mux.Print(os.Stdout)
 	expected := []string{
 		"before_global1", "before_global2", "before_global3", "before_local",
 		"handler",
@@ -285,7 +285,7 @@ func Test_Node(t *testing.T) {
 	r.Add("/abc/def/", f)
 	r.Add("/abc/def/", f)
 	r.Add("/", f)
-	r.Print()
+	r.Print(os.Stdout)
 	//go ListenAndServe(context.Background(), r, URL("0.0.0.0:1234"))
 	//fmt.Println(r)
 }
@@ -566,7 +566,7 @@ func TestNode_PathsAndPrint(t *testing.T) {
 
 	// 测试打印功能
 	// 因为打印到标准输出，这里只验证不会 panic
-	node.Print()
+	node.Print(os.Stdout)
 }
 
 func Test_Methods(t *testing.T) {

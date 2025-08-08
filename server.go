@@ -3,6 +3,7 @@ package requests
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/pprof"
 	"net/url"
@@ -83,17 +84,17 @@ func (node *Node) paths() []string {
 }
 
 // Print print trie tree struct
-func (node *Node) Print() {
-	node.print(0)
+func (node *Node) Print(w io.Writer) {
+	node.print(0, w)
 }
 
-func (node *Node) print(m int) {
+func (node *Node) print(m int, w io.Writer) {
 	paths := node.paths()
 	for method, handler := range node.methods {
-		fmt.Printf("%spath=%s, method=%s, handler=%v, next=%#v\n", strings.Repeat("    ", m), node.path, method, handler, paths)
+		fmt.Fprintf(w, "%spath=%s, method=%s, handler=%v, next=%#v\n", strings.Repeat("    ", m), node.path, method, handler, paths)
 	}
 	for _, p := range paths {
-		node.next[p].print(m + 1)
+		node.next[p].print(m+1, w)
 	}
 }
 
@@ -112,8 +113,8 @@ func NewServeMux(opts ...Option) *ServeMux {
 }
 
 // Print print trie tree struct.
-func (mux *ServeMux) Print() {
-	mux.root.Print()
+func (mux *ServeMux) Print(w io.Writer) {
+	mux.root.Print(w)
 }
 
 // HandleFunc set func pattern path to handle
