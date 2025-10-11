@@ -158,10 +158,25 @@ func traceLv(used bool, mLimit ...int) func(http.RoundTripper) http.RoundTripper
 			}
 			ctx := httptrace.WithClientTrace(req.Context(), trace)
 			req2 := req.WithContext(ctx)
-			reqLog, err := httputil.DumpRequestOut(req2, true)
+
+			// 使用 recover 来捕获 DumpRequestOut 可能的 panic
+			var reqLog []byte
+			var err error
+
+			defer func() {
+				if r := recover(); r != nil {
+					Log("! request dump panic: %v", r)
+					reqLog = []byte("(request dump failed due to panic)")
+					err = fmt.Errorf("request dump panic: %v", r)
+				}
+			}()
+			reqLog, err = httputil.DumpRequestOut(req2, true)
+
 			if err != nil {
 				Log("! request error: %v", err)
-				return nil, err
+				// 即使 DumpRequestOut 失败，我们仍然可以继续处理请求
+				// 只是不记录请求日志
+				reqLog = []byte("(request dump failed)")
 			}
 			resp, err := next.RoundTrip(req2)
 

@@ -553,6 +553,48 @@ func TestServeMux_UnknownHandlerType(t *testing.T) {
 	mux.Route("/test", 123) // 传入一个非处理器类型
 }
 
+// TestServeMux_RouteWithHandlerFunc 测试使用 http.HandlerFunc 类型
+func TestServeMux_RouteWithHandlerFunc(t *testing.T) {
+	mux := NewServeMux()
+
+	// 测试使用 http.HandlerFunc 类型
+	var handlerFunc http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("HandlerFunc ok"))
+	}
+	mux.Route("/handlerfunc", handlerFunc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/handlerfunc", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "HandlerFunc ok" {
+		t.Errorf("期望 'HandlerFunc ok'，得到 '%s'", rec.Body.String())
+	}
+}
+
+// customHandler 实现 http.Handler 接口
+type customHandler struct{}
+
+func (customHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Handler ok"))
+}
+
+// TestServeMux_RouteWithHandler 测试使用 http.Handler 类型
+func TestServeMux_RouteWithHandler(t *testing.T) {
+	mux := NewServeMux()
+
+	var handler http.Handler = customHandler{}
+	mux.Route("/handler", handler)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/handler", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "Handler ok" {
+		t.Errorf("期望 'Handler ok'，得到 '%s'", rec.Body.String())
+	}
+}
+
 // TestNode_PathsAndPrint 测试路径获取和打印
 func TestNode_PathsAndPrint(t *testing.T) {
 	node := NewNode("/", nil)

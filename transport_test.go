@@ -79,10 +79,20 @@ func TestNewTransport(t *testing.T) {
 		test func(*testing.T, *http.Transport)
 	}{
 		{
-			name: "Unix套接字",
+			name: "Unix套接字-有效路径",
 			opts: []Option{URL("unix:///tmp/test.sock")},
 			test: func(t *testing.T, tr *http.Transport) {
 				_, err := tr.DialContext(context.Background(), "unix", "/tmp/test.sock")
+				if err == nil {
+					t.Error("期望Unix套接字连接失败")
+				}
+			},
+		},
+		{
+			name: "Unix套接字-无效URL",
+			opts: []Option{URL("unix://:::")},
+			test: func(t *testing.T, tr *http.Transport) {
+				_, err := tr.DialContext(context.Background(), "unix", ":::")
 				if err == nil {
 					t.Error("期望Unix套接字连接失败")
 				}
@@ -95,16 +105,6 @@ func TestNewTransport(t *testing.T) {
 				conn, err := tr.DialContext(context.Background(), "tcp", "example.com:80")
 				if err == nil {
 					conn.Close()
-				}
-			},
-		},
-		{
-			name: "Unix套接字",
-			opts: []Option{URL("unix://:::")},
-			test: func(t *testing.T, tr *http.Transport) {
-				_, err := tr.DialContext(context.Background(), "unix", ":::")
-				if err == nil {
-					t.Error("期望Unix套接字连接失败")
 				}
 			},
 		},
@@ -181,5 +181,75 @@ func TestTransportProxy(t *testing.T) {
 	}
 	if proxyURL == nil {
 		t.Error("代理未正确设置")
+	}
+}
+
+// TestNewTransport_DialContext 测试 DialContext 的各种场景
+func TestNewTransport_DialContext(t *testing.T) {
+	tests := []struct {
+		name        string
+		url         string
+		network     string
+		addr        string
+		expectError bool
+	}{
+		{
+			name:        "无效Unix socket URL-空格",
+			url:         "unix://invalid url with spaces",
+			network:     "tcp",
+			addr:        "example.com:80",
+			expectError: true,
+		},
+		{
+			name:        "有效Unix socket路径",
+			url:         "unix:///tmp/test.sock",
+			network:     "tcp",
+			addr:        "localhost:80",
+			expectError: true,
+		},
+		{
+			name:        "无效Unix socket URL-非法字符",
+			url:         "unix://::invalid::",
+			network:     "tcp",
+			addr:        "localhost:80",
+			expectError: true,
+		},
+		{
+			name:        "Unix socket URL带端口",
+			url:         "unix:///tmp/test.sock:8080",
+			network:     "tcp",
+			addr:        "localhost:80",
+			expectError: true,
+		},
+		{
+			name:    "TCP网络",
+			url:     "",
+			network: "tcp",
+			addr:    "localhost:80",
+		},
+		{
+			name:    "TCP4网络",
+			url:     "",
+			network: "tcp4",
+			addr:    "127.0.0.1:80",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var tr *http.Transport
+			if tt.url != "" {
+				tr = newTransport(URL(tt.url))
+			} else {
+				tr = newTransport()
+			}
+
+			ctx := context.Background()
+			_, err := tr.DialContext(ctx, tt.network, tt.addr)
+
+			if tt.expectError && err == nil {
+				t.Error("期望出错但成功了")
+			}
+		})
 	}
 }

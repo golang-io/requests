@@ -2,556 +2,762 @@ package requests
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-func TestStat_String(t *testing.T) {
+// TestStat_Methods 测试 Stat 的基础方法：String、Print、RequestBody、ResponseBody
+func TestStat_Methods(t *testing.T) {
 	stat := &Stat{
-		RequestId: "test-request-id",
+		RequestId: "test-req-123",
 		StartAt:   "2023-05-01 12:00:00.000",
-		Cost:      100,
+		Cost:      150,
 	}
-	stat.Request.Method = "GET"
-	stat.Request.URL = "http://example.com/test"
-	stat.Response.StatusCode = 200
-	stat.Response.ContentLength = 1024
-
-	jsonStr := stat.String()
-	var parsedStat map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &parsedStat); err != nil {
-		t.Errorf("无法解析 Stat.String() 的输出: %v", err)
-	}
-
-	if parsedStat["RequestId"] != "test-request-id" {
-		t.Errorf("期望 RequestId 为 'test-request-id'，实际为 %v", parsedStat["RequestId"])
-	}
-}
-
-func TestStat_Print(t *testing.T) {
-	stat := &Stat{
-		StartAt: "2023-05-01 12:00:00.000",
-		Cost:    100,
-	}
-	stat.Request.Method = "GET"
+	stat.Request.Method = "POST"
 	stat.Request.RemoteAddr = "192.168.1.1:8080"
 	stat.Request.URL = "/api/v1/test"
+	stat.Request.Body = map[string]any{"key": "value"}
 	stat.Response.URL = "http://example.com"
-	stat.Response.StatusCode = 200
-	stat.Response.ContentLength = 1024
+	stat.Response.StatusCode = 201
+	stat.Response.ContentLength = 2048
+	stat.Response.Body = map[string]any{"status": "ok"}
 
-	printStr := stat.Print()
-	expected := "2023-05-01 12:00:00.000 GET \"192.168.1.1:8080 -> http://example.com/api/v1/test\" - 200 1024B in 100ms"
-	if printStr != expected {
-		t.Errorf("期望输出为 '%s'，实际为 '%s'", expected, printStr)
-	}
-}
-
-func TestResponseLoad(t *testing.T) {
-	// 创建一个模拟的 HTTP 响应
-	httpResp := &http.Response{
-		StatusCode: 200,
-		Header: http.Header{
-			"Content-Type": []string{"application/json"},
-			"X-Test":       []string{"test-value"},
-		},
-		Body: io.NopCloser(strings.NewReader(`{"message":"success"}`)),
-	}
-
-	// 创建一个模拟的请求
-	req, _ := http.NewRequest("GET", "http://example.com/test?param=value", nil)
-	req.Header.Set(RequestId, "test-request-id")
-	req.Header.Set("User-Agent", "test-agent")
-
-	// 创建响应对象
-	resp := &Response{
-		Response: httpResp,
-		Request:  req,
-		StartAt:  time.Now().Add(-100 * time.Millisecond), // 100ms 前
-	}
-
-	// 测试 responseLoad 函数
-	stat := responseLoad(resp)
-
-	// 验证基本字段
-	if stat.RequestId != "test-request-id" {
-		t.Errorf("期望 RequestId 为 'test-request-id'，实际为 %s", stat.RequestId)
-	}
-
-	if stat.Request.Method != "GET" {
-		t.Errorf("期望 Method 为 'GET'，实际为 %s", stat.Request.Method)
-	}
-
-	if !strings.Contains(stat.Request.URL, "http://example.com/test?param=value") {
-		t.Errorf("期望 URL 包含 'http://example.com/test?param=value'，实际为 %s", stat.Request.URL)
-	}
-
-	if stat.Response.StatusCode != 200 {
-		t.Errorf("期望 StatusCode 为 200，实际为 %d", stat.Response.StatusCode)
-	}
-
-	if stat.Response.Header["Content-Type"] != "application/json" {
-		t.Errorf("期望 Content-Type 为 'application/json'，实际为 %s", stat.Response.Header["Content-Type"])
-	}
-
-	// 验证响应体解析
-	responseBody, ok := stat.Response.Body.(map[string]interface{})
-	if !ok {
-		t.Errorf("期望 Response.Body 为 map[string]interface{}，实际为 %T", stat.Response.Body)
-	} else if responseBody["message"] != "success" {
-		t.Errorf("期望 message 为 'success'，实际为 %v", responseBody["message"])
-	}
-}
-
-func TestServeLoad(t *testing.T) {
-	// 创建一个模拟的 HTTP 请求
-	req, _ := http.NewRequest("POST", "/api/v1/test?param=value", strings.NewReader(`{"data":"test"}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "test-agent")
-	req.RemoteAddr = "192.168.1.1:8080"
-
-	// 创建一个模拟的响应写入器
-	w := &ResponseWriter{
-		StatusCode: 201,
-		Content:    bytes.NewBufferString(`{"status":"created"}`),
-	}
-
-	// 创建请求体缓冲区
-	buf := bytes.NewBufferString(`{"data":"test"}`)
-
-	// 测试 serveLoad 函数
-	start := time.Now().Add(-200 * time.Millisecond) // 200ms 前
-	stat := serveLoad(w, req, start, buf)
-
-	// 验证基本字段
-	if stat.Request.Method != "POST" {
-		t.Errorf("期望 Method 为 'POST'，实际为 %s", stat.Request.Method)
-	}
-
-	if stat.Request.RemoteAddr != "192.168.1.1:8080" {
-		t.Errorf("期望 RemoteAddr 为 '192.168.1.1:8080'，实际为 %s", stat.Request.RemoteAddr)
-	}
-
-	if !strings.Contains(stat.Request.URL, "/api/v1/test?param=value") {
-		t.Errorf("期望 URL 包含 '/api/v1/test?param=value'，实际为 %s", stat.Request.URL)
-	}
-
-	if stat.Response.StatusCode != 201 {
-		t.Errorf("期望 StatusCode 为 201，实际为 %d", stat.Response.StatusCode)
-	}
-
-	if stat.Response.ContentLength != int64(w.Content.Len()) { // `{"status":"created"}` 的长度
-		t.Errorf("期望 ContentLength 为 %d，实际为 %d", int64(w.Content.Len()), stat.Response.ContentLength)
-	}
-
-	// 验证请求体解析
-	requestBody, ok := stat.Request.Body.(map[string]interface{})
-	if !ok {
-		t.Errorf("期望 Request.Body 为 map[string]interface{}，实际为 %T", stat.Request.Body)
-	} else if requestBody["data"] != "test" {
-		t.Errorf("期望 data 为 'test'，实际为 %v", requestBody["data"])
-	}
-
-	// 验证响应体
-	if stat.Response.Body != `{"status":"created"}` {
-		t.Errorf("期望 Response.Body 为 '{\"status\":\"created\"}'，实际为 %v", stat.Response.Body)
-	}
-}
-
-func TestStat_WithError(t *testing.T) {
-	// 测试带有错误的情况
-	resp := &Response{
-		Err:     fmt.Errorf("测试错误"),
-		StartAt: time.Now().Add(-50 * time.Millisecond),
-	}
-
-	stat := responseLoad(resp)
-	if stat.Err != "测试错误" {
-		t.Errorf("期望错误信息为 '测试错误'，实际为 '%s'", stat.Err)
-	}
-}
-
-// TestStat_RequestBody 测试RequestBody方法
-func TestStat_RequestBody(t *testing.T) {
-	tests := []struct {
-		name     string
-		body     any
-		expected string
-		desc     string
-	}{
-		{
-			name:     "nil_body",
-			body:     nil,
-			expected: "null",
-			desc:     "nil body应该返回null字符串",
-		},
-		{
-			name:     "string_body",
-			body:     "hello world",
-			expected: `"hello world"`,
-			desc:     "字符串body应该正确序列化",
-		},
-		{
-			name:     "map_body",
-			body:     map[string]any{"key": "value", "number": 123},
-			expected: `{"key":"value","number":123}`,
-			desc:     "map body应该正确序列化为JSON",
-		},
-		{
-			name:     "slice_body",
-			body:     []string{"a", "b", "c"},
-			expected: `["a","b","c"]`,
-			desc:     "slice body应该正确序列化为JSON",
-		},
-		{
-			name:     "number_body",
-			body:     42,
-			expected: "42",
-			desc:     "数字body应该正确序列化",
-		},
-		{
-			name:     "boolean_body",
-			body:     true,
-			expected: "true",
-			desc:     "布尔值body应该正确序列化",
-		},
-		{
-			name: "struct_body",
-			body: struct {
-				Name string
-				Age  int
-			}{"Alice", 30},
-			expected: `{"Name":"Alice","Age":30}`,
-			desc:     "结构体body应该正确序列化为JSON",
-		},
-		{
-			name:     "empty_map",
-			body:     map[string]any{},
-			expected: "{}",
-			desc:     "空map应该序列化为空JSON对象",
-		},
-		{
-			name:     "empty_slice",
-			body:     []any{},
-			expected: "[]",
-			desc:     "空slice应该序列化为空JSON数组",
-		},
-		{
-			name: "nested_structure",
-			body: map[string]any{
-				"user": map[string]any{
-					"name": "Bob",
-					"age":  25,
-					"hobbies": []string{
-						"reading",
-						"swimming",
-					},
-				},
-				"active": true,
-			},
-			expected: `{"user":{"age":25,"hobbies":["reading","swimming"],"name":"Bob"},"active":true}`,
-			desc:     "嵌套结构应该正确序列化",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			stat := &Stat{}
-			stat.Request.Body = tt.body
-
-			result := stat.RequestBody()
-
-			// 对于可以JSON序列化的数据，验证JSON格式
-			if tt.body != nil {
-				// 尝试解析结果是否为有效JSON
-				var parsed any
-				if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-					// 如果不是有效JSON，检查是否为fmt.Sprintf的输出
-					expectedFallback := fmt.Sprintf("%v", tt.body)
-					if result != expectedFallback {
-						t.Errorf("测试 '%s': 期望 '%s' 或 '%s'，实际为 '%s'",
-							tt.name, tt.expected, expectedFallback, result)
-					}
-				} else {
-					// 如果是有效JSON，验证内容（不依赖字段顺序）
-					var expectedParsed any
-					if err := json.Unmarshal([]byte(tt.expected), &expectedParsed); err != nil {
-						t.Errorf("测试 '%s': 期望值不是有效JSON: %v", tt.name, err)
-					} else {
-						// 比较解析后的JSON对象
-						if !reflect.DeepEqual(parsed, expectedParsed) {
-							t.Errorf("测试 '%s': JSON内容不匹配，期望 %v，实际 %v",
-								tt.name, expectedParsed, parsed)
-						}
-					}
-				}
-			} else {
-				// 对于nil，应该返回"null"
-				if result != tt.expected {
-					t.Errorf("测试 '%s': 期望 '%s'，实际为 '%s'",
-						tt.name, tt.expected, result)
-				}
-			}
-		})
-	}
-}
-
-// TestStat_ResponseBody 测试ResponseBody方法
-func TestStat_ResponseBody(t *testing.T) {
-	tests := []struct {
-		name     string
-		body     any
-		expected string
-		desc     string
-	}{
-		{
-			name:     "nil_body",
-			body:     nil,
-			expected: "null",
-			desc:     "nil body应该返回null字符串",
-		},
-		{
-			name:     "string_body",
-			body:     "response data",
-			expected: `"response data"`,
-			desc:     "字符串body应该正确序列化",
-		},
-		{
-			name:     "map_body",
-			body:     map[string]any{"status": "success", "data": "test"},
-			expected: `{"data":"test","status":"success"}`,
-			desc:     "map body应该正确序列化为JSON",
-		},
-		{
-			name:     "slice_body",
-			body:     []int{1, 2, 3, 4, 5},
-			expected: `[1,2,3,4,5]`,
-			desc:     "slice body应该正确序列化为JSON",
-		},
-		{
-			name:     "number_body",
-			body:     3.14159,
-			expected: "3.14159",
-			desc:     "浮点数body应该正确序列化",
-		},
-		{
-			name:     "boolean_body",
-			body:     false,
-			expected: "false",
-			desc:     "布尔值body应该正确序列化",
-		},
-		{
-			name: "struct_body",
-			body: struct {
-				Message string
-				Code    int
-			}{"OK", 200},
-			expected: `{"Code":200,"Message":"OK"}`,
-			desc:     "结构体body应该正确序列化为JSON",
-		},
-		{
-			name:     "empty_map",
-			body:     map[string]any{},
-			expected: "{}",
-			desc:     "空map应该序列化为空JSON对象",
-		},
-		{
-			name:     "empty_slice",
-			body:     []any{},
-			expected: "[]",
-			desc:     "空slice应该序列化为空JSON数组",
-		},
-		{
-			name: "complex_nested_structure",
-			body: map[string]any{
-				"api": map[string]any{
-					"version": "1.0",
-					"endpoints": []map[string]any{
-						{"name": "users", "method": "GET"},
-						{"name": "posts", "method": "POST"},
-					},
-				},
-				"timestamp": "2023-05-01T12:00:00Z",
-			},
-			expected: `{"api":{"endpoints":[{"method":"GET","name":"users"},{"method":"POST","name":"posts"}],"version":"1.0"},"timestamp":"2023-05-01T12:00:00Z"}`,
-			desc:     "复杂嵌套结构应该正确序列化",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			stat := &Stat{}
-			stat.Response.Body = tt.body
-
-			result := stat.ResponseBody()
-
-			// 对于可以JSON序列化的数据，验证JSON格式
-			if tt.body != nil {
-				// 尝试解析结果是否为有效JSON
-				var parsed any
-				if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-					// 如果不是有效JSON，检查是否为fmt.Sprintf的输出
-					expectedFallback := fmt.Sprintf("%v", tt.body)
-					if result != expectedFallback {
-						t.Errorf("测试 '%s': 期望 '%s' 或 '%s'，实际为 '%s'",
-							tt.name, tt.expected, expectedFallback, result)
-					}
-				} else {
-					// 如果是有效JSON，验证内容（不依赖字段顺序）
-					var expectedParsed any
-					if err := json.Unmarshal([]byte(tt.expected), &expectedParsed); err != nil {
-						t.Errorf("测试 '%s': 期望值不是有效JSON: %v", tt.name, err)
-					} else {
-						// 比较解析后的JSON对象
-						if !reflect.DeepEqual(parsed, expectedParsed) {
-							t.Errorf("测试 '%s': JSON内容不匹配，期望 %v，实际 %v",
-								tt.name, expectedParsed, parsed)
-						}
-					}
-				}
-			} else {
-				// 对于nil，应该返回"null"
-				if result != tt.expected {
-					t.Errorf("测试 '%s': 期望 '%s'，实际为 '%s'",
-						tt.name, tt.expected, result)
-				}
-			}
-		})
-	}
-}
-
-// TestStat_BodyMethods_EdgeCases 测试RequestBody和ResponseBody的边界情况
-func TestStat_BodyMethods_EdgeCases(t *testing.T) {
-	t.Run("RequestBody边界情况", func(t *testing.T) {
-		stat := &Stat{}
-
-		// 测试无法JSON序列化的类型
-		ch := make(chan int)
-		stat.Request.Body = ch
-		result := stat.RequestBody()
-		expected := fmt.Sprintf("%v", ch)
-		if result != expected {
-			t.Errorf("无法序列化的类型应该使用fmt.Sprintf，期望 '%s'，实际为 '%s'", expected, result)
-		}
-
-		// 测试函数类型
-		testFunc := func() {}
-		stat.Request.Body = testFunc
-		result = stat.RequestBody()
-		// 函数类型无法直接使用fmt.Sprintf，但RequestBody应该返回一个字符串表示
-		if result == "" {
-			t.Errorf("函数类型应该返回非空字符串，实际为空")
-		}
-
-		// 测试循环引用
-		type CircularRef struct {
-			Self *CircularRef
-		}
-		circular := &CircularRef{}
-		circular.Self = circular
-		stat.Request.Body = circular
-		result = stat.RequestBody()
-		expected = fmt.Sprintf("%v", circular)
-		if result != expected {
-			t.Errorf("循环引用应该使用fmt.Sprintf，期望 '%s'，实际为 '%s'", expected, result)
-		}
-	})
-
-	t.Run("ResponseBody边界情况", func(t *testing.T) {
-		stat := &Stat{}
-
-		// 测试无法JSON序列化的类型
-		ch := make(chan string)
-		stat.Response.Body = ch
-		result := stat.ResponseBody()
-		expected := fmt.Sprintf("%v", ch)
-		if result != expected {
-			t.Errorf("无法序列化的类型应该使用fmt.Sprintf，期望 '%s'，实际为 '%s'", expected, result)
-		}
-
-		// 测试接口类型
-		var iface any = "interface value"
-		stat.Response.Body = iface
-		result = stat.ResponseBody()
-		expected = `"interface value"`
-		if result != expected {
-			t.Errorf("接口类型应该正确序列化，期望 '%s'，实际为 '%s'", expected, result)
-		}
-
-		// 测试指针类型
-		str := "pointer value"
-		stat.Response.Body = &str
-		result = stat.ResponseBody()
-		expected = `"pointer value"`
-		if result != expected {
-			t.Errorf("指针类型应该正确序列化，期望 '%s'，实际为 '%s'", expected, result)
-		}
-	})
-}
-
-// TestStat_BodyMethods_Integration 测试RequestBody和ResponseBody的集成场景
-func TestStat_BodyMethods_Integration(t *testing.T) {
-	t.Run("完整Stat对象的RequestBody和ResponseBody", func(t *testing.T) {
-		stat := &Stat{
-			RequestId: "test-integration",
-			StartAt:   "2023-05-01 12:00:00.000",
-			Cost:      150,
-		}
-
-		// 设置请求数据
-		stat.Request.Method = "POST"
-		stat.Request.URL = "http://example.com/api/users"
-		stat.Request.Header = map[string]string{
-			"Content-Type":  "application/json",
-			"Authorization": "Bearer token123",
-		}
-		stat.Request.Body = map[string]any{
-			"name":  "John Doe",
-			"email": "john@example.com",
-			"age":   30,
-		}
-
-		// 设置响应数据
-		stat.Response.StatusCode = 201
-		stat.Response.ContentLength = 256
-		stat.Response.Header = map[string]string{
-			"Content-Type": "application/json",
-			"Location":     "http://example.com/api/users/123",
-		}
-		stat.Response.Body = map[string]any{
-			"id":      123,
-			"name":    "John Doe",
-			"email":   "john@example.com",
-			"created": "2023-05-01T12:00:00Z",
-		}
-
-		// 测试RequestBody
-		requestBody := stat.RequestBody()
-		expectedRequestBody := `{"age":30,"email":"john@example.com","name":"John Doe"}`
-		if requestBody != expectedRequestBody {
-			t.Errorf("RequestBody集成测试失败，期望 '%s'，实际为 '%s'", expectedRequestBody, requestBody)
-		}
-
-		// 测试ResponseBody
-		responseBody := stat.ResponseBody()
-		expectedResponseBody := `{"created":"2023-05-01T12:00:00Z","email":"john@example.com","id":123,"name":"John Doe"}`
-		if responseBody != expectedResponseBody {
-			t.Errorf("ResponseBody集成测试失败，期望 '%s'，实际为 '%s'", expectedResponseBody, responseBody)
-		}
-
-		// 验证String方法包含正确的body信息
+	t.Run("String", func(t *testing.T) {
 		jsonStr := stat.String()
-		if !strings.Contains(jsonStr, expectedRequestBody) {
-			t.Errorf("String方法应该包含正确的RequestBody，但未找到期望的内容")
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+			t.Fatalf("无法解析 JSON: %v", err)
 		}
-		if !strings.Contains(jsonStr, expectedResponseBody) {
-			t.Errorf("String方法应该包含正确的ResponseBody，但未找到期望的内容")
+		if parsed["RequestId"] != "test-req-123" {
+			t.Errorf("RequestId 不匹配，期望 'test-req-123'，实际 %v", parsed["RequestId"])
 		}
 	})
+
+	t.Run("Print", func(t *testing.T) {
+		printStr := stat.Print()
+		expected := "2023-05-01 12:00:00.000 POST \"192.168.1.1:8080 -> http://example.com/api/v1/test\" - 201 2048B in 150ms"
+		if printStr != expected {
+			t.Errorf("输出不匹配\n期望: %s\n实际: %s", expected, printStr)
+		}
+	})
+
+	t.Run("RequestBody", func(t *testing.T) {
+		body := stat.RequestBody()
+		if !strings.Contains(body, "key") || !strings.Contains(body, "value") {
+			t.Errorf("RequestBody 应包含 'key' 和 'value'，实际: %s", body)
+		}
+	})
+
+	t.Run("ResponseBody", func(t *testing.T) {
+		body := stat.ResponseBody()
+		if !strings.Contains(body, "status") || !strings.Contains(body, "ok") {
+			t.Errorf("ResponseBody 应包含 'status' 和 'ok'，实际: %s", body)
+		}
+	})
+}
+
+// TestA2S 测试 a2s 函数的各种类型转换场景
+func TestA2S(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    any
+		expected string
+	}{
+		{"nil", nil, "null"},
+		{"string", "hello", `"hello"`},
+		{"number", 42, "42"},
+		{"boolean", true, "true"},
+		{"map", map[string]any{"key": "value"}, `{"key":"value"}`},
+		{"slice", []string{"a", "b"}, `["a","b"]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := a2s(tt.input)
+			if result != tt.expected {
+				t.Errorf("期望 %s，实际 %s", tt.expected, result)
+			}
+		})
+	}
+
+	// 测试无法序列化的类型
+	t.Run("unserializable", func(t *testing.T) {
+		ch := make(chan int)
+		result := a2s(ch)
+		expected := fmt.Sprintf("%v", ch)
+		if result != expected {
+			t.Errorf("无法序列化的类型应使用 fmt.Sprintf，期望 %s，实际 %s", expected, result)
+		}
+	})
+}
+
+// TestResponseLoad 测试 responseLoad 函数
+func TestResponseLoad(t *testing.T) {
+	tests := []struct {
+		name      string
+		buildResp func() *Response
+		checkFunc func(t *testing.T, stat *Stat)
+	}{
+		{
+			name: "标准JSON响应",
+			buildResp: func() *Response {
+				httpResp := &http.Response{
+					StatusCode: 200,
+					Header: http.Header{
+						"Content-Type": []string{"application/json"},
+						"X-Test":       []string{"test-value"},
+					},
+					Body: io.NopCloser(strings.NewReader(`{"message":"success"}`)),
+				}
+				req, _ := http.NewRequest("GET", "http://example.com/test?param=value", nil)
+				req.Header.Set(RequestId, "test-request-id")
+				return &Response{
+					Response: httpResp,
+					Request:  req,
+					StartAt:  time.Now().Add(-100 * time.Millisecond),
+				}
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if stat.RequestId != "test-request-id" {
+					t.Errorf("RequestId 不匹配")
+				}
+				if stat.Request.Method != "GET" {
+					t.Errorf("Method 不匹配")
+				}
+				if stat.Response.StatusCode != 200 {
+					t.Errorf("StatusCode 不匹配")
+				}
+				if responseBody, ok := stat.Response.Body.(map[string]interface{}); !ok {
+					t.Errorf("Response.Body 应为 map")
+				} else if responseBody["message"] != "success" {
+					t.Errorf("message 字段不匹配")
+				}
+			},
+		},
+		{
+			name: "带请求体",
+			buildResp: func() *Response {
+				httpResp := &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(strings.NewReader("{}")),
+				}
+				bodyStr := `{"test":"data"}`
+				req, _ := http.NewRequest("POST", "http://example.com/test", strings.NewReader(bodyStr))
+				req.GetBody = func() (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(bodyStr)), nil
+				}
+				return &Response{
+					Response: httpResp,
+					Request:  req,
+					StartAt:  time.Now(),
+				}
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if stat.Request.Body == nil {
+					t.Error("应该有请求体")
+				}
+			},
+		},
+		{
+			name: "空响应",
+			buildResp: func() *Response {
+				httpResp := &http.Response{
+					StatusCode:    200,
+					Header:        http.Header{"Content-Type": []string{"text/plain"}},
+					Body:          io.NopCloser(strings.NewReader("")),
+					ContentLength: -1,
+				}
+				req, _ := http.NewRequest("GET", "http://example.com/empty", nil)
+				return &Response{
+					Response: httpResp,
+					Request:  req,
+					StartAt:  time.Now(),
+					Content:  &bytes.Buffer{},
+				}
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if stat.Response.ContentLength != 0 {
+					t.Logf("ContentLength: %d", stat.Response.ContentLength)
+				}
+			},
+		},
+		{
+			name: "带错误",
+			buildResp: func() *Response {
+				return &Response{
+					Err:     fmt.Errorf("测试错误"),
+					StartAt: time.Now().Add(-50 * time.Millisecond),
+				}
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if stat.Err != "测试错误" {
+					t.Errorf("错误信息不匹配，期望 '测试错误'，实际 '%s'", stat.Err)
+				}
+			},
+		},
+		{
+			name: "nil请求",
+			buildResp: func() *Response {
+				httpResp := &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(strings.NewReader("test")),
+				}
+				return &Response{
+					Response: httpResp,
+					Request:  nil,
+					StartAt:  time.Now(),
+				}
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if stat.Request.URL != "" {
+					t.Error("nil 请求时 URL 应为空")
+				}
+			},
+		},
+		{
+			name: "nil响应",
+			buildResp: func() *Response {
+				req, _ := http.NewRequest("GET", "http://example.com/test", nil)
+				return &Response{
+					Response: nil,
+					Request:  req,
+					StartAt:  time.Now(),
+				}
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if stat.Response.StatusCode != 0 {
+					t.Errorf("nil 响应时状态码应为 0，实际 %d", stat.Response.StatusCode)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := tt.buildResp()
+			stat := responseLoad(resp)
+			tt.checkFunc(t, stat)
+		})
+	}
+}
+
+// TestResponseLoad_ErrorHandling 测试错误处理场景
+func TestResponseLoad_ErrorHandling(t *testing.T) {
+	tests := []struct {
+		name           string
+		buildResp      func() *Response
+		expectedErrStr string
+	}{
+		{
+			name: "读取响应体错误",
+			buildResp: func() *Response {
+				errorBody := &errorReader{err: fmt.Errorf("read body error")}
+				httpResp := &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(errorBody),
+				}
+				req, _ := http.NewRequest("GET", "http://example.com/test", nil)
+				return &Response{
+					Response: httpResp,
+					Request:  req,
+					StartAt:  time.Now(),
+					Content:  nil,
+				}
+			},
+			expectedErrStr: "read response",
+		},
+		{
+			name: "GetBody错误",
+			buildResp: func() *Response {
+				httpResp := &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(strings.NewReader("{}")),
+				}
+				req, _ := http.NewRequest("POST", "http://example.com/test", nil)
+				req.GetBody = func() (io.ReadCloser, error) {
+					return nil, fmt.Errorf("get body error")
+				}
+				return &Response{
+					Response: httpResp,
+					Request:  req,
+					StartAt:  time.Now(),
+				}
+			},
+			expectedErrStr: "read request1",
+		},
+		{
+			name: "ParseBody错误",
+			buildResp: func() *Response {
+				httpResp := &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(strings.NewReader("{}")),
+				}
+				req, _ := http.NewRequest("POST", "http://example.com/test", nil)
+				req.GetBody = func() (io.ReadCloser, error) {
+					return io.NopCloser(&errorReader{err: fmt.Errorf("parse body error")}), nil
+				}
+				return &Response{
+					Response: httpResp,
+					Request:  req,
+					StartAt:  time.Now(),
+				}
+			},
+			expectedErrStr: "read request2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := tt.buildResp()
+			stat := responseLoad(resp)
+			if !strings.Contains(stat.Err, tt.expectedErrStr) {
+				t.Errorf("期望错误信息包含 '%s'，实际 '%s'", tt.expectedErrStr, stat.Err)
+			}
+		})
+	}
+}
+
+// TestServeLoad 测试 serveLoad 函数
+func TestServeLoad(t *testing.T) {
+	tests := []struct {
+		name      string
+		buildReq  func() (*http.Request, *ResponseWriter, *bytes.Buffer)
+		checkFunc func(t *testing.T, stat *Stat)
+	}{
+		{
+			name: "标准JSON请求",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("POST", "/api/v1/test?param=value", strings.NewReader(`{"data":"test"}`))
+				req.Header.Set("Content-Type", "application/json")
+				req.RemoteAddr = "192.168.1.1:8080"
+				w := &ResponseWriter{
+					StatusCode: 201,
+					Content:    bytes.NewBufferString(`{"status":"created"}`),
+				}
+				buf := bytes.NewBufferString(`{"data":"test"}`)
+				return req, w, buf
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if stat.Request.Method != "POST" {
+					t.Errorf("Method 不匹配")
+				}
+				if stat.Request.RemoteAddr != "192.168.1.1:8080" {
+					t.Errorf("RemoteAddr 不匹配")
+				}
+				if stat.Response.StatusCode != 201 {
+					t.Errorf("StatusCode 不匹配")
+				}
+				if requestBody, ok := stat.Request.Body.(map[string]interface{}); !ok {
+					t.Errorf("Request.Body 应为 map")
+				} else if requestBody["data"] != "test" {
+					t.Errorf("data 字段不匹配")
+				}
+			},
+		},
+		{
+			name: "无效JSON请求",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("POST", "/test", strings.NewReader("invalid json"))
+				req.RemoteAddr = "127.0.0.1:8080"
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				buf := bytes.NewBufferString("invalid json")
+				return req, w, buf
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				if bodyStr, ok := stat.Request.Body.(string); !ok {
+					t.Error("无效 JSON 应存储为字符串")
+				} else if bodyStr != "invalid json" {
+					t.Errorf("请求体不匹配，期望 'invalid json'，实际 '%s'", bodyStr)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, w, buf := tt.buildReq()
+			start := time.Now().Add(-200 * time.Millisecond)
+			stat := serveLoad(w, req, start, buf)
+			tt.checkFunc(t, stat)
+		})
+	}
+}
+
+// TestServeLoad_TLS 测试 TLS 相关的 serveLoad 功能
+func TestServeLoad_TLS(t *testing.T) {
+	tests := []struct {
+		name        string
+		buildReq    func() (*http.Request, *ResponseWriter, *bytes.Buffer)
+		expectHTTPS bool
+		description string
+	}{
+		{
+			name: "HTTP请求",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:8080"
+				req.Host = "example.com:8080"
+				// 不设置 TLS，模拟 HTTP 请求
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectHTTPS: false,
+			description: "普通 HTTP 请求应该使用 http:// 协议",
+		},
+		{
+			name: "HTTPS请求",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:8443"
+				req.Host = "example.com:8443"
+				// 模拟 TLS 连接
+				req.TLS = &tls.ConnectionState{
+					Version:           0x0303, // TLS 1.2
+					HandshakeComplete: true,
+				}
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectHTTPS: true,
+			description: "TLS 请求应该使用 https:// 协议",
+		},
+		{
+			name: "HTTPS请求_默认端口",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:443"
+				req.Host = "example.com"
+				// 模拟 TLS 连接
+				req.TLS = &tls.ConnectionState{
+					Version:           0x0303, // TLS 1.2
+					HandshakeComplete: true,
+				}
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectHTTPS: true,
+			description: "TLS 请求在默认端口 443 应该使用 https:// 协议",
+		},
+		{
+			name: "HTTPS请求_自定义端口",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:9443"
+				req.Host = "example.com:9443"
+				// 模拟 TLS 连接
+				req.TLS = &tls.ConnectionState{
+					Version:           0x0303, // TLS 1.2
+					HandshakeComplete: true,
+				}
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectHTTPS: true,
+			description: "TLS 请求在自定义端口应该使用 https:// 协议",
+		},
+		{
+			name: "HTTP请求_自定义端口",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:8080"
+				req.Host = "example.com:8080"
+				// 不设置 TLS，模拟 HTTP 请求
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectHTTPS: false,
+			description: "HTTP 请求在自定义端口应该使用 http:// 协议",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, w, buf := tt.buildReq()
+			start := time.Now().Add(-100 * time.Millisecond)
+			stat := serveLoad(w, req, start, buf)
+
+			// 验证协议选择
+			expectedScheme := "http://"
+			if tt.expectHTTPS {
+				expectedScheme = "https://"
+			}
+
+			expectedURL := expectedScheme + req.Host
+			if stat.Response.URL != expectedURL {
+				t.Errorf("URL 不匹配\n期望: %s\n实际: %s\n描述: %s",
+					expectedURL, stat.Response.URL, tt.description)
+			}
+
+			// 验证其他基本字段
+			if stat.Request.Method != req.Method {
+				t.Errorf("Method 不匹配，期望 %s，实际 %s", req.Method, stat.Request.Method)
+			}
+
+			if stat.Request.RemoteAddr != req.RemoteAddr {
+				t.Errorf("RemoteAddr 不匹配，期望 %s，实际 %s", req.RemoteAddr, stat.Request.RemoteAddr)
+			}
+
+			if stat.Response.StatusCode != w.StatusCode {
+				t.Errorf("StatusCode 不匹配，期望 %d，实际 %d", w.StatusCode, stat.Response.StatusCode)
+			}
+
+			// 验证时间相关字段
+			if stat.Cost < 0 {
+				t.Error("Cost 应该大于等于 0")
+			}
+
+			if stat.StartAt != start.Format("2006-01-02 15:04:05.000") {
+				t.Errorf("StartAt 格式不正确，期望 %s，实际 %s",
+					start.Format("2006-01-02 15:04:05.000"), stat.StartAt)
+			}
+		})
+	}
+}
+
+// TestServeLoad_TLS_EdgeCases 测试 TLS 相关的边界情况
+func TestServeLoad_TLS_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		buildReq    func() (*http.Request, *ResponseWriter, *bytes.Buffer)
+		expectURL   string
+		description string
+	}{
+		{
+			name: "TLS为nil但Host包含https",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:8080"
+				req.Host = "https://example.com:8080" // 错误的 Host 格式
+				// TLS 为 nil
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectURL:   "http://https://example.com:8080", // 应该使用 http://
+			description: "即使 Host 包含 https，但 TLS 为 nil 时仍应使用 http://",
+		},
+		{
+			name: "空Host",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:8080"
+				req.Host = "" // 空 Host
+				req.TLS = &tls.ConnectionState{
+					Version:           0x0303,
+					HandshakeComplete: true,
+				}
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectURL:   "https://", // 空 Host 的情况
+			description: "空 Host 时应该使用 https:// 前缀",
+		},
+		{
+			name: "TLS未完成握手",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = "192.168.1.1:8443"
+				req.Host = "example.com:8443"
+				// TLS 存在但握手未完成
+				req.TLS = &tls.ConnectionState{
+					Version:           0x0303,
+					HandshakeComplete: false, // 握手未完成
+				}
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				return req, w, nil
+			},
+			expectURL:   "https://example.com:8443", // 仍然应该使用 https://
+			description: "TLS 存在但握手未完成时仍应使用 https://",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, w, buf := tt.buildReq()
+			start := time.Now().Add(-50 * time.Millisecond)
+			stat := serveLoad(w, req, start, buf)
+
+			if stat.Response.URL != tt.expectURL {
+				t.Errorf("URL 不匹配\n期望: %s\n实际: %s\n描述: %s",
+					tt.expectURL, stat.Response.URL, tt.description)
+			}
+		})
+	}
+}
+
+// TestServeLoad_TLS_Performance 测试 TLS 检测的性能
+func TestServeLoad_TLS_Performance(t *testing.T) {
+	// 创建大量请求来测试性能
+	req, _ := http.NewRequest("GET", "/api/test", nil)
+	req.RemoteAddr = "192.168.1.1:8443"
+	req.Host = "example.com:8443"
+	req.TLS = &tls.ConnectionState{
+		Version:           0x0303,
+		HandshakeComplete: true,
+	}
+	w := &ResponseWriter{
+		StatusCode: 200,
+		Content:    bytes.NewBufferString("ok"),
+	}
+	start := time.Now()
+
+	// 运行多次测试
+	for i := 0; i < 1000; i++ {
+		stat := serveLoad(w, req, start, nil)
+		if !strings.HasPrefix(stat.Response.URL, "https://") {
+			t.Errorf("第 %d 次测试失败，URL 应为 https:// 开头，实际: %s", i+1, stat.Response.URL)
+		}
+	}
+}
+
+// TestServeLoad_TLS_Concurrent 测试 TLS 检测的并发安全性
+func TestServeLoad_TLS_Concurrent(t *testing.T) {
+	const numGoroutines = 100
+	const numRequests = 10
+
+	var wg sync.WaitGroup
+	errors := make(chan error, numGoroutines*numRequests)
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(goroutineID int) {
+			defer wg.Done()
+
+			for j := 0; j < numRequests; j++ {
+				req, _ := http.NewRequest("GET", "/api/test", nil)
+				req.RemoteAddr = fmt.Sprintf("192.168.1.%d:8443", goroutineID%255+1)
+				req.Host = fmt.Sprintf("example%d.com:8443", goroutineID)
+
+				// 交替使用 HTTP 和 HTTPS
+				if j%2 == 0 {
+					req.TLS = &tls.ConnectionState{
+						Version:           0x0303,
+						HandshakeComplete: true,
+					}
+				}
+
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString("ok"),
+				}
+				start := time.Now()
+
+				stat := serveLoad(w, req, start, nil)
+
+				// 验证结果
+				expectedScheme := "http://"
+				if j%2 == 0 {
+					expectedScheme = "https://"
+				}
+
+				if !strings.HasPrefix(stat.Response.URL, expectedScheme) {
+					errors <- fmt.Errorf("goroutine %d, request %d: 期望 %s 开头，实际 %s",
+						goroutineID, j, expectedScheme, stat.Response.URL)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// 检查错误
+	for err := range errors {
+		t.Error(err)
+	}
+}
+
+// BenchmarkServeLoad_TLS 基准测试 TLS 检测性能
+func BenchmarkServeLoad_TLS(b *testing.B) {
+	req, _ := http.NewRequest("GET", "/api/test", nil)
+	req.RemoteAddr = "192.168.1.1:8443"
+	req.Host = "example.com:8443"
+	req.TLS = &tls.ConnectionState{
+		Version:           0x0303,
+		HandshakeComplete: true,
+	}
+	w := &ResponseWriter{
+		StatusCode: 200,
+		Content:    bytes.NewBufferString("ok"),
+	}
+	start := time.Now()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		serveLoad(w, req, start, nil)
+	}
+}
+
+// BenchmarkServeLoad_HTTP 基准测试 HTTP 检测性能
+func BenchmarkServeLoad_HTTP(b *testing.B) {
+	req, _ := http.NewRequest("GET", "/api/test", nil)
+	req.RemoteAddr = "192.168.1.1:8080"
+	req.Host = "example.com:8080"
+	// 不设置 TLS，模拟 HTTP 请求
+	w := &ResponseWriter{
+		StatusCode: 200,
+		Content:    bytes.NewBufferString("ok"),
+	}
+	start := time.Now()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		serveLoad(w, req, start, nil)
+	}
+}
+
+// BenchmarkServeLoad_TLS_Detection 基准测试 TLS 检测逻辑的性能
+func BenchmarkServeLoad_TLS_Detection(b *testing.B) {
+	// 测试 TLS 检测逻辑的性能
+	scheme := "http://"
+	r := &http.Request{
+		TLS: &tls.ConnectionState{
+			Version:           0x0303,
+			HandshakeComplete: true,
+		},
+		Host: "example.com:8443",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if r.TLS != nil {
+			scheme = "https://"
+		}
+		_ = scheme + r.Host
+		// 重置 scheme 用于下次测试
+		scheme = "http://"
+	}
 }

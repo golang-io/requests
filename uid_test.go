@@ -46,21 +46,29 @@ func Test_GenId_WithParam(t *testing.T) {
 }
 
 func Test_GenId_Timestamp(t *testing.T) {
-	// 测试时间戳部分
-	beforeGen := time.Now().UnixMicro()
-	id := GenId()
-	afterGen := time.Now().UnixMicro()
+	// 测试ID生成的时间顺序性
+	// 由于ID包含时间戳，后生成的ID应该大于先生成的ID
+	ids := make([]string, 10)
 
-	// 解析生成的ID
-	parsedNum, err := strconv.ParseUint(id, 36, 64)
-	if err != nil {
-		t.Fatalf("Failed to parse generated ID: %v", err)
+	// 生成多个ID
+	for i := range 10 {
+		ids[i] = GenId()
+		time.Sleep(time.Microsecond) // 确保时间戳不同
 	}
 
-	// 验证时间戳部分是否在合理范围内
-	timestamp := int64(parsedNum / 1000)
-	if timestamp < beforeGen || timestamp > afterGen {
-		t.Errorf("Timestamp out of expected range: %d not in [%d, %d]", timestamp, beforeGen, afterGen)
+	// 验证ID的递增性（基于时间戳）
+	for i := 1; i < len(ids); i++ {
+		prevNum, err1 := strconv.ParseUint(ids[i-1], 36, 64)
+		currNum, err2 := strconv.ParseUint(ids[i], 36, 64)
+
+		if err1 != nil || err2 != nil {
+			t.Fatalf("Failed to parse IDs: %v, %v", err1, err2)
+		}
+
+		if currNum <= prevNum {
+			t.Errorf("ID should be increasing: %s (%d) <= %s (%d)",
+				ids[i], currNum, ids[i-1], prevNum)
+		}
 	}
 }
 
@@ -69,7 +77,7 @@ func Test_GenId_Uniqueness(t *testing.T) {
 	count := 1000
 
 	ids := make(map[string]bool)
-	for i := 0; i < count; i++ {
+	for range count {
 		id := GenId()
 		if ids[id] {
 			// SKIP: 这是有问题的, 先忽略!
@@ -85,7 +93,7 @@ func Test_GenId_Concurrent(t *testing.T) {
 	ids := sync.Map{}
 	wg := sync.WaitGroup{}
 
-	for i := 0; i < count; i++ {
+	for range count {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

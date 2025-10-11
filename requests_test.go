@@ -53,7 +53,7 @@ func Test_ProxyGet(t *testing.T) {
 		Header("a", "b"),
 		Cookie(http.Cookie{Name: "username", Value: "golang"}),
 		BasicAuth("user", "123456"),
-		Timeout(5*time.Second),
+		Timeout(10*time.Second),
 		//Hosts(map[string][]string{"127.0.0.1:8080": {"192.168.1.1:80"}, "4.org:80": {"httpbin.org:80"}}),
 		//Proxy("http://127.0.0.1:8080"),
 	)

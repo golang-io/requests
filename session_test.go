@@ -149,13 +149,6 @@ func TestSession_RoundTrip(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		{
-			name: "无效URL的请求",
-			setup: []Option{
-				URL("invalid-url"),
-			},
-			wantErr: true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -173,7 +166,7 @@ func TestSession_RoundTrip(t *testing.T) {
 
 			// 验证结果
 			if (err != nil) != tt.wantErr {
-				t.Skipf("RoundTrip() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("RoundTrip() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
@@ -190,10 +183,116 @@ func TestSession_RoundTrip(t *testing.T) {
 					t.Fatalf("读取响应失败: %v", err)
 				}
 
-				if !tt.wantErr && string(body) != "test response" {
+				if string(body) != "test response" {
 					t.Errorf("期望响应内容为 'test response'，得到 %s", string(body))
 				}
 			}
+		})
+	}
+}
+
+// TestSession_ErrorHandling 测试 Do 和 DoRequest 方法的错误处理
+func TestSession_ErrorHandling(t *testing.T) {
+	sess := New()
+
+	tests := []struct {
+		name          string
+		method        string // "Do" 或 "DoRequest"
+		url           string
+		wantErr       bool
+		checkResponse bool // 对于 DoRequest，检查是否返回 Response 对象
+	}{
+		{
+			name:    "Do方法-无效URL",
+			method:  "Do",
+			url:     "://invalid-url",
+			wantErr: true,
+		},
+		{
+			name:          "DoRequest方法-无效URL",
+			method:        "DoRequest",
+			url:           "://invalid-url",
+			wantErr:       true,
+			checkResponse: true,
+		},
+		{
+			name:          "DoRequest方法-无效主机",
+			method:        "DoRequest",
+			url:           "http://invalid-host-that-does-not-exist:12345",
+			wantErr:       true,
+			checkResponse: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.method == "Do" {
+				_, err := sess.Do(context.Background(), URL(tt.url))
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Do() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			} else {
+				resp, err := sess.DoRequest(context.Background(), URL(tt.url))
+				if (err != nil) != tt.wantErr {
+					t.Errorf("DoRequest() error = %v, wantErr %v", err, tt.wantErr)
+				}
+				if tt.checkResponse && resp == nil {
+					t.Error("即使出错，DoRequest 也应该返回 Response 对象")
+				}
+			}
+		})
+	}
+}
+
+// TestSession_NilHandling 测试 nil 响应和响应体的处理
+func TestSession_NilHandling(t *testing.T) {
+	tests := []struct {
+		name      string
+		transport http.RoundTripper
+		checkFunc func(t *testing.T, resp *Response, err error)
+	}{
+		{
+			name: "nil响应处理",
+			transport: RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				return nil, nil
+			}),
+			checkFunc: func(t *testing.T, resp *Response, err error) {
+				if err != nil {
+					t.Errorf("不期望错误，但得到: %v", err)
+				}
+				if resp == nil {
+					t.Error("不应该返回 nil Response")
+					return
+				}
+				if resp.Response == nil || resp.Response.Body == nil {
+					t.Error("Response.Body 不应该为 nil")
+				}
+			},
+		},
+		{
+			name: "nil响应体处理",
+			transport: RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: 200,
+					Body:       nil,
+				}, nil
+			}),
+			checkFunc: func(t *testing.T, resp *Response, err error) {
+				if err != nil {
+					t.Errorf("不期望错误，但得到: %v", err)
+				}
+				if resp.Response.Body == nil {
+					t.Error("Response.Body 不应该为 nil")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sess := New(RoundTripper(tt.transport))
+			resp, err := sess.DoRequest(context.Background(), URL("http://example.com"))
+			tt.checkFunc(t, resp, err)
 		})
 	}
 }
