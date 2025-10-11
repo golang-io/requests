@@ -38,7 +38,7 @@ func (m *mockResponseWriter) WriteHeader(code int) { m.statuscode = code }
 // TestResponseWriterBasic tests basic functionality of ResponseWriter
 func TestResponseWriterBasic(t *testing.T) {
 	mock := newMockResponseWriter()
-	w := newResponseWriter(mock)
+	w := NewResponseWriter(mock)
 
 	// Test WriteHeader
 	w.WriteHeader(http.StatusCreated)
@@ -69,7 +69,7 @@ func TestResponseWriterBasic(t *testing.T) {
 // TestResponseWriterIntegration tests the ResponseWriter in a real HTTP server context
 func TestResponseWriterIntegration(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rw := newResponseWriter(w)
+		rw := NewResponseWriter(w)
 		rw.WriteHeader(http.StatusAccepted)
 		rw.Write([]byte("hello world"))
 	})
@@ -100,7 +100,7 @@ func TestResponseWriterIntegration(t *testing.T) {
 // TestResponseWriterConcurrency tests concurrent writes to ResponseWriter
 func TestResponseWriterConcurrency(t *testing.T) {
 	mock := newMockResponseWriter()
-	w := newResponseWriter(mock)
+	w := NewResponseWriter(mock)
 
 	var wg sync.WaitGroup
 	workers := 10
@@ -131,7 +131,7 @@ func TestResponseWriterConcurrency(t *testing.T) {
 // TestResponseWriterHijack tests the hijack functionality
 func TestResponseWriterHijack(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hijackable := newResponseWriter(w)
+		hijackable := NewResponseWriter(w)
 		conn, bufrw, err := hijackable.Hijack()
 		if err != nil {
 			t.Errorf("Hijack failed: %v", err)
@@ -164,7 +164,7 @@ func TestResponseWriterHijack(t *testing.T) {
 // BenchmarkResponseWriterWrite benchmarks the Write method
 func BenchmarkResponseWriterWrite(b *testing.B) {
 	mock := newMockResponseWriter()
-	w := newResponseWriter(mock)
+	w := NewResponseWriter(mock)
 	content := []byte("benchmark content")
 
 	b.ResetTimer()
@@ -176,7 +176,7 @@ func BenchmarkResponseWriterWrite(b *testing.B) {
 // BenchmarkResponseWriterConcurrentWrite benchmarks concurrent writes
 func BenchmarkResponseWriterConcurrentWrite(b *testing.B) {
 	mock := newMockResponseWriter()
-	w := newResponseWriter(mock)
+	w := NewResponseWriter(mock)
 	content := []byte("concurrent benchmark content")
 
 	b.ResetTimer()
@@ -190,7 +190,7 @@ func BenchmarkResponseWriterConcurrentWrite(b *testing.B) {
 // TestResponseWriterFlush tests the flush functionality
 func TestResponseWriterFlush(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		flusher := newResponseWriter(w)
+		flusher := NewResponseWriter(w)
 		flusher.Write([]byte("chunk1"))
 		flusher.Flush()
 		time.Sleep(10 * time.Millisecond)
@@ -220,7 +220,7 @@ func TestResponseWriterFlush(t *testing.T) {
 // TestResponseWriterRead 测试 Read 方法
 func TestResponseWriterRead(t *testing.T) {
 	mock := newMockResponseWriter()
-	w := newResponseWriter(mock)
+	w := NewResponseWriter(mock)
 
 	// 写入测试数据
 	testData := []byte("test data for reading")
@@ -253,7 +253,7 @@ func TestResponseWriterRead(t *testing.T) {
 func TestResponseWriterPush(t *testing.T) {
 	// 创建支持 HTTP/2 的测试服务器
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rw := newResponseWriter(w)
+		rw := NewResponseWriter(w)
 		err := rw.Push("/style.css", &http.PushOptions{
 			Method: "GET",
 			Header: http.Header{
@@ -296,7 +296,7 @@ func TestResponseWriterWriteError(t *testing.T) {
 		writeError: fmt.Errorf("write error"),
 	}
 
-	w := newResponseWriter(errMock)
+	w := NewResponseWriter(errMock)
 
 	// 测试写入错误
 	n, err := w.Write([]byte("test"))

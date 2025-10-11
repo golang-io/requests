@@ -27,8 +27,8 @@ func New(opts ...Option) *Session {
 }
 
 // HTTPClient returns the http.Client that is configured to be used for HTTP requests.
-func (s *Session) HTTPClient() *http.Client {
-	return s.client
+func (s *Session) HTTPClient(opts ...Option) *http.Client {
+	return &http.Client{Timeout: s.client.Timeout, Transport: s.RoundTripper(opts...)}
 }
 
 // Transport returns *http.Transport.

@@ -21,7 +21,7 @@ type ResponseWriter struct {
 }
 
 // newResponseWriter 创建一个新的 ResponseWriter
-func newResponseWriter(w http.ResponseWriter) *ResponseWriter {
+func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
 	return &ResponseWriter{ResponseWriter: w, StatusCode: 200, Content: &bytes.Buffer{}}
 }
 

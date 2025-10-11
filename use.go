@@ -114,7 +114,7 @@ func printHandler(f func(ctx context.Context, stat *Stat)) func(handler http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			ww := newResponseWriter(w)
+			ww := NewResponseWriter(w)
 			buf, body, _ := CopyBody(r.Body)
 			r.Body = body
 			next.ServeHTTP(ww, r)
