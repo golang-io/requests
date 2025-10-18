@@ -531,8 +531,9 @@ func (mux *ServeMux) Pprof() {
 //	)
 //	server.ListenAndServe()
 type Server struct {
-	options Options      // 服务器配置选项 / Server configuration options
-	server  *http.Server // 底层 HTTP 服务器 / Underlying HTTP server
+	options     Options      // 服务器配置选项 / Server configuration options
+	server      *http.Server // 底层 HTTP 服务器 / Underlying HTTP server
+	http3Server *HTTP3Server
 }
 
 // NewServer 创建一个新的 HTTP 服务器
@@ -576,6 +577,12 @@ func NewServer(ctx context.Context, h http.Handler, opts ...Option) *Server {
 	// 合并配置选项
 	// Merge configuration options
 	s.options = newOptions(mux.opts, opts...)
+
+	// 如果启用了 HTTP/3，创建 HTTP/3 服务器
+	// If HTTP/3 is enabled, create HTTP/3 server
+	if s.options.EnableHTTP3 {
+		s.http3Server = NewHTTP3Server(ctx, h, opts...)
+	}
 
 	// 设置超时
 	// Set timeouts
@@ -671,9 +678,23 @@ func (s *Server) Shutdown(ctx context.Context) error {
 //	if err := server.ListenAndServe(); err != nil {
 //	    log.Fatal(err)
 //	}
+//
+// 根据是否配置证书选择 HTTP 或 HTTPS
+// Choose HTTP or HTTPS based on cert configuration
+// ListenAndServe(TLS) always returns a non-nil error. After [Server.Shutdown] or
+// [Server.Close], the returned error is [ErrServerClosed].
+//
+// 如果启用了 HTTP/3，将使用 QUIC 协议（UDP）而非 TCP
+// If HTTP/3 is enabled, uses QUIC protocol (UDP) instead of TCP
 func (s *Server) ListenAndServe() (err error) {
-	// 根据是否配置证书选择 HTTP 或 HTTPS
-	// Choose HTTP or HTTPS based on cert configuration
+	// 如果启用了 HTTP/3，使用 HTTP/3 服务器
+	// If HTTP/3 is enabled, use HTTP/3 server
+	if s.options.EnableHTTP3 && s.http3Server != nil {
+		return s.http3Server.ListenAndServe()
+	}
+
+	// 否则使用标准 HTTP/1.1 或 HTTP/2 服务器
+	// Otherwise use standard HTTP/1.1 or HTTP/2 server
 	if s.options.certFile == "" || s.options.keyFile == "" {
 		// 启动 HTTP 服务器 / Start HTTP server
 		return s.server.ListenAndServe()

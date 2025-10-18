@@ -37,9 +37,11 @@ import (
 //	resp1, _ := sess.DoRequest(context.Background(), requests.Path("/users"))
 //	resp2, _ := sess.DoRequest(context.Background(), requests.Path("/posts"))
 type Session struct {
-	opts      []Option        // 会话级别的配置选项 / Session-level configuration options
-	transport *http.Transport // 底层传输层，管理连接池 / Underlying transport layer, manages connection pool
-	client    *http.Client    // HTTP客户端实例 / HTTP client instance
+	opts           []Option        // 会话级别的配置选项 / Session-level configuration options
+	transport      *http.Transport // 底层传输层，管理连接池 / Underlying transport layer, manages connection pool
+	client         *http.Client    // HTTP客户端实例 / HTTP client instance
+	http3Transport *HTTP3RoundTripper
+	client         *http.Client
 }
 
 // New 创建一个新的会话实例
@@ -72,8 +74,21 @@ type Session struct {
 func New(opts ...Option) *Session {
 	options := newOptions(opts)
 	transport := newTransport(opts...)
+
+	// 如果启用了 HTTP/3，创建 HTTP/3 传输层
+	// If HTTP/3 is enabled, create HTTP/3 transport
+	var http3Transport *HTTP3RoundTripper
+	if options.EnableHTTP3 {
+		http3Transport = newHTTP3Transport(opts...)
+	}
+
 	client := &http.Client{Timeout: options.Timeout, Transport: transport}
-	s := &Session{opts: opts, transport: transport, client: client}
+	s := &Session{
+		opts:           opts,
+		transport:      transport,
+		http3Transport: http3Transport,
+		client:         client,
+	}
 	return s
 }
 
@@ -265,14 +280,28 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 // 使用场景 / Use Cases:
 //   - 需要自定义请求/响应处理逻辑 / Need custom request/response processing logic
 //   - 与其他库集成时 / When integrating with other libraries
+//
+// RoundTripper returns a configured http.RoundTripper.
+// It applies all registered middleware in reverse order.
+// If HTTP/3 is enabled, it will use the HTTP/3 transport.
 func (s *Session) RoundTripper(opts ...Option) http.RoundTripper {
 	return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		options := newOptions(s.opts, opts...)
 
 		// 设置默认传输层
 		// Set default transport
+		// 选择传输层：优先使用 HTTP/3
+		// Choose transport: prefer HTTP/3 if enabled
 		if options.Transport == nil {
-			options.Transport = RoundTripperFunc(s.client.Do)
+			if options.EnableHTTP3 && s.http3Transport != nil {
+				// 使用 HTTP/3 传输层
+				// Use HTTP/3 transport
+				options.Transport = RoundTripperFunc(s.http3Transport.RoundTrip)
+			} else {
+				// 使用标准 HTTP/1.1 或 HTTP/2 传输层
+				// Use standard HTTP/1.1 or HTTP/2 transport
+				options.Transport = RoundTripperFunc(s.client.Do)
+			}
 		}
 
 		// 应用所有中间件（装饰器模式）

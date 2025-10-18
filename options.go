@@ -73,8 +73,13 @@ type Options struct {
 	keyFile  string // 密钥文件路径 / Key file path
 
 	// ===== 网络配置 / Network Configuration =====
+	// client session used
 	LocalAddr net.Addr                              // 本地地址绑定 / Local address binding
 	Proxy     func(*http.Request) (*url.URL, error) // 代理配置函数 / Proxy configuration function
+
+	// HTTP/3 (QUIC) support
+	// EnableHTTP3 enables HTTP/3 protocol using QUIC
+	EnableHTTP3 bool
 }
 
 // Option 是用于配置 Options 的函数类型
@@ -873,5 +878,46 @@ func OnStart(f func(*http.Server)) Option {
 func OnShutdown(f func(*http.Server)) Option {
 	return func(o *Options) {
 		o.OnShutdown = f
+	}
+}
+
+// EnableHTTP3 启用 HTTP/3 协议支持
+// Enable HTTP/3 protocol using QUIC transport
+//
+// HTTP/3 特性 (HTTP/3 Features):
+//   - 基于 UDP 的 QUIC 协议 (QUIC protocol over UDP)
+//   - 内置 TLS 1.3 加密 (Built-in TLS 1.3 encryption)
+//   - 0-RTT 连接建立 (0-RTT connection establishment)
+//   - 多路复用无队头阻塞 (Multiplexing without head-of-line blocking)
+//   - 连接迁移支持 (Connection migration support)
+//
+// 客户端使用示例 (Client usage example):
+//
+//	sess := requests.New(
+//	    requests.URL("https://example.com"),
+//	    requests.EnableHTTP3(true),
+//	)
+//	resp, err := sess.DoRequest(context.TODO())
+//
+// 服务端使用示例 (Server usage example):
+//
+//	mux := requests.NewServeMux()
+//	mux.Route("/ping", func(w http.ResponseWriter, r *http.Request) {
+//	    fmt.Fprintf(w, "pong\n")
+//	})
+//	err := requests.ListenAndServeHTTP3(
+//	    context.Background(),
+//	    mux,
+//	    requests.URL(":8443"),
+//	    requests.CertKey("cert.pem", "key.pem"),
+//	)
+//
+// 注意事项 (Important notes):
+//   - 客户端：自动使用 HTTP/3，无需证书 (Client: Auto uses HTTP/3, no cert needed)
+//   - 服务端：必须提供 TLS 证书和密钥 (Server: Must provide TLS cert and key)
+//   - HTTP/3 默认使用 443 端口 (HTTP/3 uses port 443 by default)
+func EnableHTTP3(enable bool) Option {
+	return func(o *Options) {
+		o.EnableHTTP3 = enable
 	}
 }
