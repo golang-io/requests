@@ -41,7 +41,6 @@ type Session struct {
 	transport      *http.Transport // 底层传输层，管理连接池 / Underlying transport layer, manages connection pool
 	client         *http.Client    // HTTP客户端实例 / HTTP client instance
 	http3Transport *HTTP3RoundTripper
-	client         *http.Client
 }
 
 // New 创建一个新的会话实例
