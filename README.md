@@ -1,663 +1,675 @@
-# <center>requests</center>
-<div style="text-align: center;">
-    <div><strong>Requests is a simple, yet elegant, Go HTTP client and server library for Humans™ ✨🍰✨</strong></div>
-	<a href="https://deepwiki.com/golang-io/requests"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
-    <a href="https://pkg.go.dev/github.com/golang-io/requests"><img src="https://pkg.go.dev/badge/github.com/golang-io/requests.svg" alt="Go Reference"></a>
-    <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/license-Apache%20V2-blue.svg" alt="Apache V2 License"></a>
-    <a href="https://github.com/golang-io/requests/actions/workflows/go.yml"><img src="https://github.com/golang-io/requests/actions/workflows/go.yml/badge.svg?branch=main" alt="Build status"></a>
-    <a href="https://goreportcard.com/report/github.com/golang-io/requests"><img src="https://goreportcard.com/badge/github.com/golang-io/requests" alt="go report"></a>
-	<a href="https://sourcegraph.com/github.com/golang-io/requests?badge"><img src="https://sourcegraph.com/github.com/golang-io/requests/-/badge.svg" alt="requests on Sourcegraph"></a>
-	<a href="https://codecov.io/gh/golang-io/requests" > <img src="https://codecov.io/gh/golang-io/requests/graph/badge.svg?token=T8MZ92JL1T"/> </a>
+# Requests - Elegant HTTP Client and Server Library for Go
+
+<div align="center">
+
+**Requests is a simple, yet elegant, Go HTTP client and server library for Humans™ ✨🍰✨**
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/golang-io/requests)
+[![Go Reference](https://pkg.go.dev/badge/github.com/golang-io/requests.svg)](https://pkg.go.dev/github.com/golang-io/requests)
+[![Apache V2 License](https://img.shields.io/badge/license-Apache%20V2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Build Status](https://github.com/golang-io/requests/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/golang-io/requests/actions/workflows/go.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/golang-io/requests)](https://goreportcard.com/report/github.com/golang-io/requests)
+[![Sourcegraph](https://sourcegraph.com/github.com/golang-io/requests/-/badge.svg)](https://sourcegraph.com/github.com/golang-io/requests?badge)
+[![codecov](https://codecov.io/gh/golang-io/requests/graph/badge.svg?token=T8MZ92JL1T)](https://codecov.io/gh/golang-io/requests)
+
+English | [简体中文](README_CN.md)
 
 </div>
-<hr/>
 
-## Overview
+---
 
-Requests is inspired by Python's famous requests library, bringing a more elegant, intuitive approach to HTTP in Go. This library simplifies common HTTP tasks while remaining fully compatible with Go's standard library.
+## 📖 Overview
 
-#### API Reference and User Guide available on [Read the Docs](https://pkg.go.dev/github.com/golang-io/requests)
+Requests is inspired by Python's famous `requests` library, bringing a more elegant and intuitive approach to HTTP in Go. This library simplifies common HTTP tasks while remaining fully compatible with Go's standard `net/http` library.
 
-#### Supported Features & Best–Practices
-* Safe Close `resp.Body`
-* Only depends on standard library
-* Streaming Downloads
-* Chunked HTTP Requests
-* Keep-Alive & Connection Pooling
-* Sessions with Cookie Persistence
-* Basic & Digest Authentication
-* Implement http.RoundTripper fully compatible with `net/http`
-* Offer File System to upload or download files easily
+### ✨ Key Features
 
-## Installation
+- 🔒 **Automatic Safe Body Close** - No more `resp.Body.Close()` concerns
+- 📦 **Zero External Dependencies** - Only depends on Go standard library
+- 🌊 **Streaming Downloads** - Efficient handling of large files
+- 🔄 **Chunked HTTP Requests** - Support for streaming uploads
+- 🔗 **Keep-Alive & Connection Pooling** - Automatic connection reuse management
+- 🍪 **Sessions with Cookie Persistence** - Easy session management
+- 🔐 **Basic & Digest Authentication** - Built-in authentication support
+- 🎯 **Full http.RoundTripper Implementation** - Fully compatible with `net/http`
+- 📁 **File System Support** - Easy file upload and download
+- 🔌 **Middleware System** - Flexible request/response processing chain
+- 🖥️ **HTTP Server** - Built-in routing and middleware support
+- 🐛 **Debug Tracing** - Built-in HTTP request tracing
 
-```shell
+### 🎯 Design Philosophy
+
+```
+Simple is better than complex
+Beautiful is better than ugly
+Explicit is better than implicit
+Practical beats purity
+```
+
+---
+
+## 📥 Installation
+
+```bash
 go get github.com/golang-io/requests
 ```
 
-## Quick Start
-#### Get Started
-```shell
-cat github.com/golang-io/examples/example_1/main.go
-```
+**Requirements:** Go 1.22.1 or higher
+
+---
+
+## 🚀 Quick Start
+
+### Hello World
 
 ```go
 package main
 
 import (
-	"context"
-	"github.com/golang-io/requests"
+    "context"
+    "fmt"
+    "github.com/golang-io/requests"
 )
 
 func main() {
-	sess := requests.New(requests.URL("https://httpbin.org/uuid"), requests.TraceLv(4))
-	_, _ = sess.DoRequest(context.TODO())
+    // Create a session
+    sess := requests.New(requests.URL("https://httpbin.org"))
+    
+    // Send request (Body is automatically closed)
+    resp, _ := sess.DoRequest(context.Background(), 
+        requests.Path("/get"),
+    )
+    
+    // Content is automatically cached
+    fmt.Println(resp.Content.String())
 }
-
 ```
 
-```shell
-$ go run github.com/golang-io/examples/example_1/main.go
-* Connect: httpbin.org:80
-* Got Conn: <nil> -> <nil>
-* Connect: httpbin.org:443
-* Resolved Host: httpbin.org
-* Resolved DNS: [50.16.63.240 107.21.176.221 3.220.97.10 18.208.241.22], Coalesced: false, err=<nil>
-* Trying ConnectStart tcp 50.16.63.240:443...
-* Completed connection: tcp 50.16.63.240:443, err=<nil>
-* SSL HandshakeComplete: true
-* Got Conn: 192.168.255.10:64170 -> 50.16.63.240:443
-> GET /uuid HTTP/1.1
-> Host: httpbin.org
-> User-Agent: Go-http-client/1.1
-> Accept-Encoding: gzip
-> 
-> 
+### Why Requests?
 
-< HTTP/1.1 200 OK
-< Content-Length: 53
-< Access-Control-Allow-Credentials: true
-< Access-Control-Allow-Origin: *
-< Connection: keep-alive
-< Content-Type: application/json
-< Date: Fri, 22 Mar 2024 12:16:04 GMT
-< Server: gunicorn/19.9.0
-< 
-< {
-<   "uuid": "ba0a69b3-25d0-415e-b998-030120052f4d"
-< }
-< 
-
-* 
-
-```
-
-* use `requests.New()` method to create a global session for http client.
-* use `requests.URL()` method to define a sever address to request.
-* use `requests.Trace()` method to open http trace mode.
-* use `DoRequest()` method to send a request from local to remote server.
-
-Also, you can using simple method like `requests.Get()`, `requests.Post()` etc. to send a request,
-and return `*http.Response`, `error`. This is fully compatible with `net/http` method.
-
-#### Simple Get
+**Traditional way** (using `net/http`):
 ```go
-package main
-
-import (
-	"bytes"
-	"github.com/golang-io/requests"
-	"log"
-)
-
-func main() {
-	resp, err := requests.Get("https://httpbin.org/get")
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer resp.Body.Close()
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(resp.Body); err != nil {
-		log.Fatalln(err)
-	}
-	log.Println(buf.String())
+resp, err := http.Get("https://api.example.com/users")
+if err != nil {
+    return err
 }
-```
+defer resp.Body.Close() // Easy to forget!
 
-```shell
-% go run github.com/golang-io/examples/example_2/main.go
-2024/03/22 20:31:12 {
-  "args": {}, 
-  "headers": {
-    "Host": "httpbin.org", 
-    "User-Agent": "Go-http-client/1.1", 
-    "X-Amzn-Trace-Id": "Root=1-65fd7a10-781981cc111ac4662510a87e"
-  }, 
-  "origin": "43.132.141.21", 
-  "url": "https://httpbin.org/get"
+body, err := io.ReadAll(resp.Body)
+if err != nil {
+    return err
 }
 
+var users []User
+json.Unmarshal(body, &users) // Lots of boilerplate
 ```
 
-#### Auto handle `response.Body`
-
-There are many negative cases, network connections not released or memory cannot be released,
-because the `response.Body` is not closed correctly. To solve this problem, `requests` offers
-type `*requests.Response`. The response body sample read from `response.Content`.
-There is no need to declare a bunch of variables and duplicate code just for reading the `response.Body`.
-Additionally, the body will be safely closed, regardless of whether you need to read it or not.
-
-For example:
-
-```go
-package main
-
-import (
-	"context"
-	"github.com/golang-io/requests"
-	"log"
-)
-
-func main() {
-	sess := requests.New(requests.URL("http://httpbin.org/post"))
-	resp, err := sess.DoRequest(context.TODO(), requests.MethodPost, requests.Body("Hello world"))
-	log.Printf("resp=%s, err=%v", resp.Content, err)
-}
-
-```
-```shell
-% go run github.com/golang-io/examples/example_3/main.go
-2024/03/22 20:43:25 resp={
-  "args": {}, 
-  "data": "Hello world", 
-  "files": {}, 
-  "form": {}, 
-  "headers": {
-    "Content-Length": "11", 
-    "Host": "httpbin.org", 
-    "User-Agent": "Go-http-client/1.1", 
-    "X-Amzn-Trace-Id": "Root=1-65fd7ced-718974b7528527911b977e1e"
-  }, 
-  "json": null, 
-  "origin": "127.0.0.1", 
-  "url": "http://httpbin.org/post"
-}
-, err=<nil>
-
-```
-
-### Usage
-
-#### Common Rules
-All parameters can be set at two levels: session and request. 
-
-**Session parameters** are persistent and apply to all requests made with that session:
-```go
-// Create a session with persistent parameters
-sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.Header("User-Agent", "My Custom Agent"),
-    requests.Timeout(10),
-)
-
-// All requests from this session will inherit these parameters
-resp1, _ := sess.DoRequest(context.TODO(), requests.Path("/users"))
-resp2, _ := sess.DoRequest(context.TODO(), requests.Path("/posts"))
-```
-
-**Request parameters** are provisional and only apply to the specific request:
+**With Requests**:
 ```go
 sess := requests.New(requests.URL("https://api.example.com"))
+resp, _ := sess.DoRequest(ctx, requests.Path("/users"))
 
-// This parameter only applies to this specific request
-resp, _ := sess.DoRequest(context.TODO(), 
-    requests.Path("/users"),
-    requests.Query("limit", "10"),
-)
+var users []User
+resp.JSON(&users) // Clean and elegant!
 ```
 
-#### Debugging - Log/Trace
+---
 
-Requests provides multiple trace levels to help with debugging:
+## 📚 Core Concepts
 
-```go
-package main
+### 1. Session
 
-import (
-	"context"
-	"github.com/golang-io/requests"
-)
-
-func main() {
-	sess := requests.New(
-		requests.URL("https://httpbin.org/get"),
-		requests.Trace(),  // Most detailed tracing
-	)
-	
-	// The trace output will show detailed connection info
-	resp, _ := sess.DoRequest(context.TODO())
-}
-```
-
-You can also use custom loggers:
+Session is the core concept in Requests, managing configuration, connection pools, and middleware:
 
 ```go
-sess := requests.New(
-    requests.URL("https://httpbin.org/get"),
-    requests.Logger(myCustomLogger),
-)
-```
-
-#### Set Body
-
-Requests supports multiple body formats:
-
-```go
-// String body
-resp, _ := sess.DoRequest(context.TODO(), 
-    requests.MethodPost,
-    requests.Body("Hello World"),
-)
-
-// JSON body (automatically serialized)
-resp, _ := sess.DoRequest(context.TODO(), 
-    requests.MethodPost,
-    requests.JSON(map[string]interface{}{
-        "name": "John",
-        "age": 30,
-    }),
-)
-
-// Form data
-resp, _ := sess.DoRequest(context.TODO(), 
-    requests.MethodPost,
-    requests.Form(map[string]string{
-        "username": "johndoe",
-        "password": "secret",
-    }),
-)
-
-// File upload
-resp, _ := sess.DoRequest(context.TODO(), 
-    requests.MethodPost,
-    requests.FileUpload("file", "/path/to/file.pdf", "application/pdf"),
-)
-```
-
-#### Set Header
-
-Headers can be set at both session and request levels:
-
-```go
-// Session-level headers
 sess := requests.New(
     requests.URL("https://api.example.com"),
     requests.Header("Authorization", "Bearer token123"),
-    requests.Header("Accept", "application/json"),
+    requests.Timeout(30*time.Second),
+    requests.MaxConns(100),
 )
 
-// Request-level headers (will override session headers if same key)
-resp, _ := sess.DoRequest(context.TODO(),
-    requests.Header("X-Custom-Header", "value"),
-    requests.Headers(map[string]string{
-        "Content-Type": "application/json",
-        "X-Request-ID": "abc123",
+// All requests inherit session configuration
+resp1, _ := sess.DoRequest(ctx, requests.Path("/users"))
+resp2, _ := sess.DoRequest(ctx, requests.Path("/posts"))
+```
+
+**Features:**
+- ✅ Thread-safe (can be used concurrently by multiple goroutines)
+- ✅ Connection reuse (automatic connection pool management)
+- ✅ Configuration persistence (session-level config applies to all requests)
+
+### 2. Two-Level Configuration System
+
+Requests supports a flexible two-level configuration system:
+
+```go
+// Session-level configuration (applies to all requests)
+sess := requests.New(
+    requests.URL("https://api.example.com"),
+    requests.Timeout(30*time.Second),
+)
+
+// Request-level configuration (applies only to this request, can override session config)
+resp, _ := sess.DoRequest(ctx,
+    requests.Path("/long-task"),
+    requests.Timeout(60*time.Second), // Override session's 30-second timeout
+)
+```
+
+### 3. Enhanced Response
+
+Requests provides an enhanced `*Response` type:
+
+```go
+resp, _ := sess.DoRequest(ctx)
+
+// Automatically cached content
+fmt.Println(resp.Content.String())
+
+// Parse JSON
+var data map[string]any
+resp.JSON(&data)
+
+// Request statistics
+fmt.Printf("Duration: %v\n", resp.Cost)
+stat := resp.Stat()
+```
+
+**Benefits:**
+- ✅ Automatic safe closing of `resp.Body`
+- ✅ Content automatically cached in `Content`
+- ✅ Support for multiple reads of response content
+- ✅ Request timing and statistics tracking
+
+---
+
+## 💡 Usage Examples
+
+### GET Requests
+
+```go
+// Simple GET
+resp, _ := requests.Get("https://httpbin.org/get")
+
+// GET with query parameters
+sess := requests.New(requests.URL("https://api.example.com"))
+resp, _ := sess.DoRequest(ctx,
+    requests.Path("/users"),
+    requests.Params(map[string]string{
+        "page": "1",
+        "size": "20",
     }),
 )
 ```
 
-#### Authentication
-
-Requests supports various authentication methods:
+### POST Requests
 
 ```go
-// Basic authentication
+// POST JSON (automatically serialized)
+data := map[string]string{
+    "name": "John",
+    "email": "john@example.com",
+}
+
+resp, _ := sess.DoRequest(ctx,
+    requests.MethodPost,
+    requests.Path("/users"),
+    requests.Body(data), // Automatically serialized to JSON
+    requests.Header("Content-Type", "application/json"),
+)
+
+// POST form data
+form := url.Values{}
+form.Set("username", "john")
+form.Set("password", "secret")
+
+resp, _ := sess.DoRequest(ctx,
+    requests.MethodPost,
+    requests.Form(form), // Automatically sets Content-Type
+)
+```
+
+### Setting Headers
+
+```go
+sess := requests.New(
+    requests.URL("https://api.example.com"),
+    // Session-level headers
+    requests.Header("Accept", "application/json"),
+    requests.Header("User-Agent", "MyApp/1.0"),
+)
+
+// Request-level headers
+resp, _ := sess.DoRequest(ctx,
+    requests.Header("X-Request-ID", "abc-123"),
+    requests.Headers(map[string]string{
+        "X-Custom-1": "value1",
+        "X-Custom-2": "value2",
+    }),
+)
+```
+
+### Authentication
+
+```go
+// Basic Authentication
 sess := requests.New(
     requests.URL("https://api.example.com"),
     requests.BasicAuth("username", "password"),
 )
 
-// Bearer token
+// Bearer Token
 sess := requests.New(
     requests.URL("https://api.example.com"),
-    requests.BearerAuth("your-token-here"),
-)
-
-// Custom auth scheme
-sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.Auth("CustomScheme", "credentials"),
+    requests.Header("Authorization", "Bearer token123"),
 )
 ```
 
-#### Gzip Compression
-
-Requests handles gzip compression automatically:
+### File Download
 
 ```go
-// Automatic handling of gzip responses
-sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.AutoDecompress(true),  // Default is true
-)
+// Small file: one-time read
+resp, _ := sess.DoRequest(ctx, requests.Path("/file.txt"))
+os.WriteFile("downloaded.txt", resp.Content.Bytes(), 0644)
 
-// Send compressed request
-resp, _ := sess.DoRequest(context.TODO(),
-    requests.MethodPost,
-    requests.Gzip("large content here"),
-)
-```
+// Large file: streaming download
+file, _ := os.Create("large-file.zip")
+defer file.Close()
 
-#### Request and Response Middleware
-
-Add middleware to process requests or responses:
-
-```go
-// Request middleware
-sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.RequestMiddleware(func(req *http.Request) error {
-        req.Header.Add("X-Request-Time", time.Now().String())
-        return nil
-    }),
-)
-
-// Response middleware
-sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.ResponseMiddleware(func(resp *http.Response) error {
-        log.Printf("Response received with status: %d", resp.StatusCode)
+resp, _ := sess.DoRequest(ctx,
+    requests.Path("/large-file.zip"),
+    requests.Stream(func(lineNum int64, data []byte) error {
+        file.Write(data)
         return nil
     }),
 )
 ```
 
-#### Client and Transport Middleware
-
-Customize the underlying HTTP client behavior:
+### Timeout Control
 
 ```go
-// Custom transport
-transport := &http.Transport{
-    MaxIdleConns:        100,
-    MaxIdleConnsPerHost: 10,
-    IdleConnTimeout:     30 * time.Second,
-}
-
+// Session-level timeout
 sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.Transport(transport),
+    requests.Timeout(10*time.Second),
 )
 
-// Transport middleware
-sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.TransportMiddleware(func(rt http.RoundTripper) http.RoundTripper {
-        return requests.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-            startTime := time.Now()
-            resp, err := rt.RoundTrip(req)
-            duration := time.Since(startTime)
-            log.Printf("Request took %v", duration)
-            return resp, err
-        })
-    }),
+// Request-level timeout
+resp, _ := sess.DoRequest(ctx,
+    requests.Timeout(30*time.Second), // Override session config
 )
+
+// Context-based timeout
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+resp, _ := sess.DoRequest(ctx)
 ```
 
-#### Proxy
-
-Configure proxies for your requests:
+### Proxy Settings
 
 ```go
 // HTTP proxy
 sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.Proxy("http://proxy.example.com:8080"),
+    requests.Proxy("http://proxy.company.com:8080"),
 )
 
 // SOCKS5 proxy
 sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.Proxy("socks5://proxy.example.com:1080"),
-)
-
-// Per-request proxy
-resp, _ := sess.DoRequest(context.TODO(),
-    requests.Proxy("http://special-proxy.example.com:8080"),
+    requests.Proxy("socks5://127.0.0.1:1080"),
 )
 ```
 
-#### Retry
+### Custom Middleware
 
-Automatic retry functionality for failed requests:
+```go
+// Request ID middleware
+requestIDMiddleware := func(next http.RoundTripper) http.RoundTripper {
+    return requests.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+        req.Header.Set("X-Request-ID", uuid.New().String())
+        return next.RoundTrip(req)
+    })
+}
+
+sess := requests.New(
+    requests.URL("https://api.example.com"),
+    requests.Use(requestIDMiddleware),
+)
+```
+
+### HTTP Server
+
+```go
+// Create server
+mux := requests.NewServeMux(
+    requests.Addr("0.0.0.0:8080"),
+    requests.Use(loggingMiddleware), // Global middleware
+)
+
+// Register routes
+mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, "Hello, World!")
+})
+
+mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
+    // Handle request
+}, requests.Use(authMiddleware)) // Route-specific middleware
+
+// Start server
+requests.ListenAndServe(context.Background(), mux)
+```
+
+---
+
+## 📊 Feature Comparison
+
+| Feature | net/http | requests |
+|---------|----------|----------|
+| Ease of Use | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| Auto Body Close | ❌ | ✅ |
+| Session Management | Manual | Automatic |
+| Connection Pool | Need Configuration | Built-in |
+| JSON Support | Manual | Built-in |
+| Middleware System | DIY | Built-in |
+| Streaming | Manual | Built-in |
+| Debug Tracing | External Tools | Built-in |
+| Server Support | Basic | Enhanced |
+
+---
+
+## 🎓 Advanced Topics
+
+### Unix Domain Socket
 
 ```go
 sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.Retry(3, 500*time.Millisecond),  // 3 retries with 500ms delay
-    // Custom retry condition
-    requests.RetryCondition(func(resp *http.Response, err error) bool {
-        return err != nil || resp.StatusCode >= 500
-    }),
+    requests.URL("unix:///var/run/docker.sock"),
+)
+
+resp, _ := sess.DoRequest(ctx,
+    requests.URL("http://localhost/version"),
 )
 ```
 
-#### Sessions with Cookies
-
-Maintain a persistent session with cookies:
+### Custom Transport
 
 ```go
-// Create a session that automatically handles cookies
+transport := &http.Transport{
+    MaxIdleConns:        200,
+    MaxIdleConnsPerHost: 100,
+    IdleConnTimeout:     90 * time.Second,
+}
+
 sess := requests.New(
-    requests.URL("https://api.example.com"),
-    requests.CookieJar(true),  // Enable cookie jar
-)
-
-// Login to establish session
-_, _ = sess.DoRequest(context.TODO(),
-    requests.MethodPost,
-    requests.Path("/login"),
-    requests.Form(map[string]string{
-        "username": "johndoe",
-        "password": "secret",
-    }),
-)
-
-// Subsequent requests will include session cookies automatically
-resp, _ := sess.DoRequest(context.TODO(),
-    requests.Path("/profile"),
+    requests.RoundTripper(transport),
 )
 ```
 
-#### Streaming Downloads
-
-Handle large file downloads efficiently:
+### Debug and Tracing
 
 ```go
-package main
-
-import (
-	"context"
-	"github.com/golang-io/requests"
-	"io"
-	"os"
+sess := requests.New(
+    requests.URL("https://httpbin.org"),
+    requests.Trace(), // Enable detailed tracing
 )
 
-func main() {
-	file, _ := os.Create("large-file.zip")
-	defer file.Close()
-	
-	sess := requests.New(requests.URL("https://example.com/large-file.zip"))
-	
-	// Stream the download directly to file
-	resp, _ := sess.DoRequest(context.TODO(), requests.Stream(true))
-	
-	_, _ = io.Copy(file, resp.Body)
-	resp.Body.Close()
+resp, _ := sess.DoRequest(ctx)
+// Output shows: DNS resolution, connection establishment, TLS handshake, request/response details
+```
+
+### Request Statistics
+
+```go
+resp, _ := sess.DoRequest(ctx)
+
+// Get detailed statistics
+stat := resp.Stat()
+fmt.Printf("Request duration: %dms\n", stat.Cost)
+fmt.Printf("Status code: %d\n", stat.Response.StatusCode)
+fmt.Printf("Request URL: %s\n", stat.Request.URL)
+```
+
+---
+
+## 🌟 Best Practices
+
+### 1. Use Sessions for Connection Management
+
+```go
+// ✅ Recommended: Create once, reuse many times
+var apiClient = requests.New(
+    requests.URL("https://api.example.com"),
+    requests.Timeout(30*time.Second),
+)
+
+// ❌ Not recommended: Create new session for each request
+func badExample() {
+    sess := requests.New(...)  // Waste of resources
+    sess.DoRequest(...)
 }
 ```
 
-## Advanced Examples
+### 2. Use DoRequest Instead of Do
 
-### REST API Client
+```go
+// ✅ Recommended: DoRequest automatically handles Body closing
+resp, _ := sess.DoRequest(ctx)
+fmt.Println(resp.Content.String()) // Safe
+
+// ❌ Not recommended: Need to manually close Body
+resp, _ := sess.Do(ctx)
+defer resp.Body.Close() // Easy to forget
+```
+
+### 3. Leverage Configuration Inheritance
+
+```go
+// ✅ Recommended: Session-level config + request-level override
+sess := requests.New(
+    requests.URL("https://api.example.com"),
+    requests.Timeout(10*time.Second), // Default 10 seconds
+)
+
+// Most requests use default config
+resp1, _ := sess.DoRequest(ctx)
+
+// Special requests override config
+resp2, _ := sess.DoRequest(ctx,
+    requests.Timeout(60*time.Second), // Special task needs 60 seconds
+)
+```
+
+### 4. Use Middleware for Common Logic
+
+```go
+// ✅ Recommended: Use middleware
+sess := requests.New(
+    requests.Use(
+        requestIDMiddleware,   // Add request ID
+        retryMiddleware,       // Auto retry
+        loggingMiddleware,     // Logging
+    ),
+)
+
+// ❌ Not recommended: Repeat code in every request
+func badExample() {
+    req.Header.Set("X-Request-ID", ...)  // Repeated code
+    // Manual retry logic
+    // Manual logging
+}
+```
+
+### 5. Error Handling
+
+```go
+// ✅ Recommended: Complete error handling
+resp, err := sess.DoRequest(ctx)
+if err != nil {
+    log.Printf("Request failed: %v", err)
+    return err
+}
+
+if resp.StatusCode != http.StatusOK {
+    log.Printf("HTTP error: %d", resp.StatusCode)
+    return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+}
+
+// ❌ Not recommended: Ignore errors
+resp, _ := sess.DoRequest(ctx) // Ignoring error
+```
+
+---
+
+## 📖 Complete Example
+
+### Building a REST API Client
 
 ```go
 package main
 
 import (
-	"context"
-	"fmt"
-	"github.com/golang-io/requests"
-	"log"
+    "context"
+    "fmt"
+    "github.com/golang-io/requests"
+    "time"
 )
+
+type APIClient struct {
+    sess *requests.Session
+}
 
 type User struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+    ID    int    `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+func NewAPIClient(baseURL, token string) *APIClient {
+    sess := requests.New(
+        requests.URL(baseURL),
+        requests.Header("Authorization", "Bearer "+token),
+        requests.Header("Accept", "application/json"),
+        requests.Header("Content-Type", "application/json"),
+        requests.Timeout(30*time.Second),
+        requests.MaxConns(100),
+    )
+    
+    return &APIClient{sess: sess}
+}
+
+func (c *APIClient) GetUser(ctx context.Context, userID int) (*User, error) {
+    resp, err := c.sess.DoRequest(ctx,
+        requests.Path(fmt.Sprintf("/users/%d", userID)),
+    )
+    if err != nil {
+        return nil, err
+    }
+    
+    if resp.StatusCode != 200 {
+        return nil, fmt.Errorf("API error: %d", resp.StatusCode)
+    }
+    
+    var user User
+    if err := resp.JSON(&user); err != nil {
+        return nil, err
+    }
+    
+    return &user, nil
+}
+
+func (c *APIClient) CreateUser(ctx context.Context, user *User) (*User, error) {
+    resp, err := c.sess.DoRequest(ctx,
+        requests.MethodPost,
+        requests.Path("/users"),
+        requests.Body(user),
+    )
+    if err != nil {
+        return nil, err
+    }
+    
+    var created User
+    resp.JSON(&created)
+    return &created, nil
 }
 
 func main() {
-	apiClient := requests.New(
-		requests.URL("https://jsonplaceholder.typicode.com"),
-		requests.Header("Accept", "application/json"),
-		requests.Timeout(10),
-	)
-	
-	// GET users
-	resp, err := apiClient.DoRequest(context.TODO(),
-		requests.Path("/users"),
-	)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
-	}
-	
-	var users []User
-	if err := resp.JSON(&users); err != nil {
-		log.Fatalf("Parse error: %v", err)
-	}
-	
-	fmt.Printf("Found %d users\n", len(users))
-	
-	// POST a new user
-	newUser := User{Name: "John Doe", Email: "john@example.com"}
-	resp, err = apiClient.DoRequest(context.TODO(),
-		requests.MethodPost,
-		requests.Path("/users"),
-		requests.JSON(newUser),
-	)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
-	}
-	
-	var createdUser User
-	if err := resp.JSON(&createdUser); err != nil {
-		log.Fatalf("Parse error: %v", err)
-	}
-	
-	fmt.Printf("Created user with ID: %d\n", createdUser.ID)
+    client := NewAPIClient("https://api.example.com", "your-token")
+    
+    user, _ := client.GetUser(context.Background(), 123)
+    fmt.Printf("User: %s\n", user.Name)
 }
 ```
 
-## Server
+---
 
-```go
-package main
+## 🔧 Configuration Options Quick Reference
 
-import (
-	"context"
-	"fmt"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/golang-io/requests"
-	"github.com/gorilla/websocket"
-	"io"
-	"log"
-	"net/http"
-)
+### Client Configuration
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+| Option | Description | Example |
+|--------|-------------|---------|
+| `URL(string)` | Set target URL | `requests.URL("https://api.example.com")` |
+| `Path(string)` | Append path | `requests.Path("/users")` |
+| `Method(string)` | Set HTTP method | `requests.MethodPost` |
+| `Timeout(duration)` | Set timeout | `requests.Timeout(30*time.Second)` |
+| `Header(k, v)` | Add header | `requests.Header("Accept", "application/json")` |
+| `BasicAuth(user, pass)` | Basic authentication | `requests.BasicAuth("admin", "secret")` |
+| `Body(any)` | Set request body | `requests.Body(map[string]string{"key": "value"})` |
+| `Form(values)` | Form data | `requests.Form(url.Values{...})` |
+| `Params(map)` | Query parameters | `requests.Params(map[string]string{...})` |
+| `Proxy(addr)` | Set proxy | `requests.Proxy("http://proxy:8080")` |
+| `MaxConns(int)` | Max connections | `requests.MaxConns(100)` |
+| `Verify(bool)` | Verify certificate | `requests.Verify(false)` |
 
-func ws(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer conn.Close()
-	for {
-		messageType, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("Failed to read message: %v", err)
-			break
-		}
+### Server Configuration
 
-		log.Printf("Received message: %s", message)
+| Option | Description | Example |
+|--------|-------------|---------|
+| `Use(middleware...)` | Register middleware | `requests.Use(loggingMiddleware)` |
+| `CertKey(cert, key)` | TLS certificate | `requests.CertKey("cert.pem", "key.pem")` |
+| `OnStart(func)` | Start callback | `requests.OnStart(func(s *http.Server){...})` |
+| `OnShutdown(func)` | Shutdown callback | `requests.OnShutdown(func(s *http.Server){...})` |
 
-		err = conn.WriteMessage(messageType, message)
-		if err != nil {
-			log.Printf("Failed to write message: %v", err)
-			break
-		}
-	}
-}
+---
 
-func main() {
-	r := requests.NewServeMux(
-		requests.URL("0.0.0.0:1234"),
-		requests.Use(middleware.Recoverer, middleware.Logger),
-		requests.Use(func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				next.ServeHTTP(w, r)
-			})
-		}),
-	)
-	r.Route("/panic", func(w http.ResponseWriter, r *http.Request) {
-		panic("panic test")
-	})
-	r.Route("/echo", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(w, r.Body)
-	})
-	r.Route("/ping", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprintf(w, "pong\n")
-	}, requests.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-		})
-	}))
-	r.Route("/ws", ws)
-	err := requests.ListenAndServe(context.Background(), r)
-	fmt.Println(err)
-}
-```
-Then, do some requests...
-```shell
-% curl http://127.0.0.1:1234/echo
-% curl http://127.0.0.1:1234/ping
-pong
+## 🤝 Contributing
 
-```
-And, there are some logs from server.
-```shell
-% go run github.com/golang-io/examples/server/example_1/main.go
-2024-03-27 02:47:47 http serve 0.0.0.0:1234
-2024/03/27 02:47:59 "GET http://127.0.0.1:1234/echo HTTP/1.1" from 127.0.0.1:60922 - 000 0B in 9.208µs
-path use {}
-2024/03/27 02:48:06 "GET http://127.0.0.1:1234/ping HTTP/1.1" from 127.0.0.1:60927 - 200 5B in 5.125µs
+We welcome all forms of contributions!
 
-```
+- 🐛 Report bugs
+- 💡 Suggest new features
+- 📖 Improve documentation
+- 🔧 Submit pull requests
 
-## Contributing
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+---
 
-## License
+## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+This project is licensed under the [Apache License 2.0](LICENSE).
 
-## Acknowledgments
+---
+
+## 🙏 Acknowledgments
+
+- Inspired by Python's [requests](https://github.com/psf/requests) library
+- Thanks to all contributors
+
+---
+
+## 📚 Resources
+
+- [API Documentation](https://pkg.go.dev/github.com/golang-io/requests)
+- [GitHub Repository](https://github.com/golang-io/requests)
+- [Issue Tracker](https://github.com/golang-io/requests/issues)
+- [Discussions](https://github.com/golang-io/requests/discussions)
+
+---
+
+<div align="center">
+
+**If this project helps you, please give us a ⭐ Star!**
+
+Made with ❤️ by the Requests Team
+
+</div>
