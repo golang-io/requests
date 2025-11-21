@@ -35,6 +35,7 @@ Requests is inspired by Python's famous `requests` library, bringing a more eleg
 - 📁 **File System Support** - Easy file upload and download
 - 🔌 **Middleware System** - Flexible request/response processing chain
 - 🖥️ **HTTP Server** - Built-in routing and middleware support
+- 🎯 **Path Parameters** - Support for `:id` and `{id}` syntax (compatible with Gin, Echo, and Go 1.22+)
 - 🐛 **Debug Tracing** - Built-in HTTP request tracing
 
 ### 🎯 Design Philosophy
@@ -354,6 +355,18 @@ mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
     // Handle request
 }, requests.Use(authMiddleware)) // Route-specific middleware
 
+// Path parameters with :id syntax (compatible with Gin, Echo, etc.)
+mux.GET("/api/users/:id", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id") // Get path parameter value
+    fmt.Fprintf(w, "User ID: %s", id)
+})
+
+// Path parameters with {id} syntax (compatible with Go 1.22+ standard library)
+mux.PUT("/api/posts/{id}", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id") // Get path parameter value
+    fmt.Fprintf(w, "Post ID: %s", id)
+})
+
 // Start server
 requests.ListenAndServe(context.Background(), mux)
 ```
@@ -377,6 +390,52 @@ requests.ListenAndServe(context.Background(), mux)
 ---
 
 ## 🎓 Advanced Topics
+
+### Path Parameters
+
+Requests supports two path parameter syntaxes for flexible routing:
+
+**`:id` syntax** (compatible with Gin, Echo, etc.):
+```go
+mux := requests.NewServeMux()
+
+// Register route with :id parameter
+mux.GET("/api/users/:id", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id")
+    fmt.Fprintf(w, "User ID: %s", id)
+})
+
+// Request: GET /api/users/123
+// Response: "User ID: 123"
+```
+
+**`{id}` syntax** (compatible with Go 1.22+ standard library):
+```go
+mux := requests.NewServeMux()
+
+// Register route with {id} parameter
+mux.PUT("/api/posts/{id}", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id")
+    fmt.Fprintf(w, "Post ID: %s", id)
+})
+
+// Request: PUT /api/posts/456
+// Response: "Post ID: 456"
+```
+
+**Matching Rules:**
+- Exact match takes priority over parameter match
+- Static paths are matched before parameter paths
+- Parameters are automatically extracted and available via `r.PathValue(name)`
+
+**Example with multiple parameters:**
+```go
+mux.GET("/api/users/:userId/posts/:postId", func(w http.ResponseWriter, r *http.Request) {
+    userId := r.PathValue("userId")
+    postId := r.PathValue("postId")
+    fmt.Fprintf(w, "User: %s, Post: %s", userId, postId)
+})
+```
 
 ### Unix Domain Socket
 

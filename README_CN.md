@@ -35,6 +35,7 @@ Requests 受 Python 著名的 `requests` 库启发，为 Go 带来了更优雅�
 - 📁 **文件系统支持**（轻松上传和下载文件）
 - 🔌 **中间件系统**（灵活的请求/响应处理链）
 - 🖥️ **HTTP 服务器**（内置路由和中间件支持）
+- 🎯 **路径参数支持**（支持 `:id` 和 `{id}` 两种语法，兼容 Gin、Echo 和 Go 1.22+）
 - 🐛 **调试追踪**（内置 HTTP 请求追踪）
 
 ### 🎯 设计理念
@@ -354,6 +355,18 @@ mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
     // 处理请求
 }, requests.Use(authMiddleware)) // 路由级中间件
 
+// 路径参数 - :id 语法（兼容 Gin、Echo 等框架）
+mux.GET("/api/users/:id", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id") // 获取路径参数值
+    fmt.Fprintf(w, "用户 ID: %s", id)
+})
+
+// 路径参数 - {id} 语法（兼容 Go 1.22+ 标准库）
+mux.PUT("/api/posts/{id}", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id") // 获取路径参数值
+    fmt.Fprintf(w, "文章 ID: %s", id)
+})
+
 // 启动服务器
 requests.ListenAndServe(context.Background(), mux)
 ```
@@ -377,6 +390,52 @@ requests.ListenAndServe(context.Background(), mux)
 ---
 
 ## 🎓 进阶主题
+
+### 路径参数
+
+Requests 支持两种路径参数语法，提供灵活的路由功能：
+
+**`:id` 语法**（兼容 Gin、Echo 等框架）：
+```go
+mux := requests.NewServeMux()
+
+// 注册带 :id 参数的路由
+mux.GET("/api/users/:id", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id")
+    fmt.Fprintf(w, "用户 ID: %s", id)
+})
+
+// 请求: GET /api/users/123
+// 响应: "用户 ID: 123"
+```
+
+**`{id}` 语法**（兼容 Go 1.22+ 标准库）：
+```go
+mux := requests.NewServeMux()
+
+// 注册带 {id} 参数的路由
+mux.PUT("/api/posts/{id}", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id")
+    fmt.Fprintf(w, "文章 ID: %s", id)
+})
+
+// 请求: PUT /api/posts/456
+// 响应: "文章 ID: 456"
+```
+
+**匹配规则：**
+- 精确匹配优先于参数匹配
+- 静态路径优先于参数路径
+- 参数值自动提取，可通过 `r.PathValue(name)` 获取
+
+**多参数示例：**
+```go
+mux.GET("/api/users/:userId/posts/:postId", func(w http.ResponseWriter, r *http.Request) {
+    userId := r.PathValue("userId")
+    postId := r.PathValue("postId")
+    fmt.Fprintf(w, "用户: %s, 文章: %s", userId, postId)
+})
+```
 
 ### Unix Domain Socket
 
