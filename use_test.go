@@ -257,12 +257,12 @@ func Test_SSE(t *testing.T) {
 	}, Method("PUT"))
 	r.Route("/sse", func(w http.ResponseWriter, r *http.Request) {
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			select {
 			case <-r.Context().Done():
 				return
 			case <-time.After(1 * time.Second):
-				w.Write([]byte(fmt.Sprintf(`{"a":"12345\n", "b": %d}`, i)))
+				w.Write(fmt.Appendf(nil, `{"a":"12345\n", "b": %d}`, i))
 			}
 		}
 	}, Use(SSE()), Method("DELETE"))

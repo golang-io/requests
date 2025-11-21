@@ -60,13 +60,13 @@ func TestStreamRoundTrip(t *testing.T) {
 func BenchmarkStreamRead(b *testing.B) {
 	// 准备测试数据
 	var testData strings.Builder
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		fmt.Fprintf(&testData, "Line %d\n", i)
 	}
 	data := testData.String()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		reader := strings.NewReader(data)
 		_, err := streamRead(reader, func(_ int64, _ []byte) error {
 			return nil

@@ -108,7 +108,7 @@ func Test_GenId_Concurrent(t *testing.T) {
 
 // go test -v -test.bench='Benchmark_GenId.*' -test.run='KKK.*' -benchmem .
 func Benchmark_GenId(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		GenId()
 	}
 }

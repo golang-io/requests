@@ -59,7 +59,7 @@ func BenchmarkDoRequestSerial(b *testing.B) {
 	c := New(URL(s.URL))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = c.DoRequest(context.Background(), Body("."))
 	}
 }

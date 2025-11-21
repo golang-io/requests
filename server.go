@@ -45,6 +45,78 @@ func WarpHandler(next http.Handler) func(http.Handler) http.Handler {
 	}
 }
 
+// isParam 判断路径段是否为参数，并提取参数名
+// isParam determines if a path segment is a parameter and extracts the parameter name
+//
+// 支持的语法 / Supported syntaxes:
+//   - :id 风格（兼容 Gin、Echo 等框架）/ :id style (compatible with Gin, Echo, etc.)
+//   - {id} 风格（兼容 Go 1.22+ 标准库）/ {id} style (compatible with Go 1.22+ standard library)
+//
+// 参数 / Parameters:
+//   - segment: 路径段 / Path segment
+//
+// 返回值 / Returns:
+//   - bool: 是否为参数 / Whether it is a parameter
+//   - string: 参数名（如果不是参数则返回空字符串）/ Parameter name (empty string if not a parameter)
+//
+// 示例 / Example:
+//
+//	isParam, name := isParam(":id")      // true, "id"
+//	isParam, name := isParam("{id}")     // true, "id"
+//	isParam, name := isParam("users")    // false, ""
+func isParam(segment string) (bool, string) {
+	if segment == "" {
+		return false, ""
+	}
+
+	// 检查 :id 语法（以冒号开头，且长度大于1）
+	// Check :id syntax (starts with colon, length > 1)
+	if strings.HasPrefix(segment, ":") && len(segment) > 1 {
+		// 验证参数名只包含字母、数字、下划线
+		// Validate parameter name contains only letters, numbers, underscores
+		name := segment[1:]
+		for _, r := range name {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+				return false, ""
+			}
+		}
+		return true, name
+	}
+
+	// 检查 {id} 语法（以 { 开头，以 } 结尾，且长度大于2）
+	// Check {id} syntax (starts with {, ends with }, length > 2)
+	if strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}") && len(segment) > 2 {
+		// 验证参数名只包含字母、数字、下划线
+		// Validate parameter name contains only letters, numbers, underscores
+		name := segment[1 : len(segment)-1]
+		for _, r := range name {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+				return false, ""
+			}
+		}
+		return true, name
+	}
+
+	return false, ""
+}
+
+// ParamNode 表示一个路径参数节点
+// ParamNode represents a path parameter node
+//
+// 用于存储路径参数信息，支持 :id 和 {id} 两种语法
+// Used to store path parameter information, supports both :id and {id} syntaxes
+//
+// 示例 / Example:
+//
+//	路由: /api/users/:id
+//	参数节点: name="id", node=子节点树
+//	Route: /api/users/:id
+//	ParamNode: name="id", node=child node tree
+type ParamNode struct {
+	name string // 参数名（如 "id"）/ Parameter name (e.g., "id")
+	node *Node  // 参数节点对应的子节点 / Child node for this parameter
+}
+
 // Node 是路由树（Trie树）的节点
 // Node is a node in the routing tree (Trie tree)
 //
@@ -55,6 +127,8 @@ func WarpHandler(next http.Handler) func(http.Handler) http.Handler {
 //   - Supports longest prefix matching
 //   - 每个节点可以有多个 HTTP 方法的处理器
 //   - Each node can have handlers for multiple HTTP methods
+//   - 支持路径参数（通过 param 字段）
+//   - Supports path parameters (via param field)
 //
 // 示例 / Example:
 //
@@ -62,10 +136,16 @@ func WarpHandler(next http.Handler) func(http.Handler) http.Handler {
 //	树结构: / -> api -> users -> 123 -> profile
 //	Route: /api/users/123/profile
 //	Tree: / -> api -> users -> 123 -> profile
+//
+//	路由: /api/users/:id
+//	树结构: / -> api -> users -> param(name="id") -> ...
+//	Route: /api/users/:id
+//	Tree: / -> api -> users -> param(name="id") -> ...
 type Node struct {
 	path    string                  // 当前节点的路径片段 / Current node's path segment
 	opts    []Option                // 节点的配置选项 / Node's configuration options
-	next    map[string]*Node        // 子节点映射 / Child nodes map
+	next    map[string]*Node        // 子节点映射（精确匹配）/ Child nodes map (exact match)
+	param   *ParamNode              // 参数节点（用于 :id 或 {id}）/ Parameter node (for :id or {id})
 	methods map[string]http.Handler // HTTP 方法到处理器的映射 / HTTP method to handler mapping
 }
 
@@ -80,26 +160,38 @@ type Node struct {
 // 返回值 / Returns:
 //   - *Node: 新创建的节点 / Newly created node
 func NewNode(path string, h http.Handler, opts ...Option) *Node {
-	return &Node{path: path, opts: opts, next: make(map[string]*Node), methods: make(map[string]http.Handler)}
+	return &Node{
+		path:    path,
+		opts:    opts,
+		next:    make(map[string]*Node),
+		param:   nil,
+		methods: make(map[string]http.Handler),
+	}
 }
 
 // Add 向路由树中添加一个路由
 // Add adds a route to the routing tree
 //
 // 参数 / Parameters:
-//   - path: 路由路径（如 "/api/users"）/ Route path (e.g., "/api/users")
+//   - path: 路由路径（如 "/api/users" 或 "/api/users/:id"）/ Route path (e.g., "/api/users" or "/api/users/:id")
 //   - h: 处理函数 / Handler function
 //   - opts: 配置选项（可以指定 HTTP 方法）/ Configuration options (can specify HTTP method)
 //
 // 实现原理 / Implementation:
 //   - 按照 "/" 分割路径 / Split path by "/"
 //   - 逐级创建树节点 / Create tree nodes level by level
+//   - 支持路径参数（:id 或 {id} 语法）/ Supports path parameters (:id or {id} syntax)
 //   - 支持路径覆盖（后注册的会覆盖先注册的）/ Supports path override (later registration overrides earlier)
+//
+// 路径参数语法 / Path parameter syntax:
+//   - :id 风格（兼容 Gin、Echo 等框架）/ :id style (compatible with Gin, Echo, etc.)
+//   - {id} 风格（兼容 Go 1.22+ 标准库）/ {id} style (compatible with Go 1.22+ standard library)
 //
 // 示例 / Example:
 //
 //	node.Add("/api/users", handler, requests.Method("GET"))
 //	node.Add("/api/users/:id", handler, requests.Method("POST"))
+//	node.Add("/api/users/{id}", handler, requests.Method("PUT"))
 func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 	if path == "" {
 		panic("path is empty")
@@ -116,10 +208,29 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 	// 逐级创建节点 / Create nodes level by level
 	current := node
 	for _, p := range strings.Split(path[1:], "/") {
-		if _, ok := current.next[p]; !ok {
-			current.next[p] = NewNode(p, http.NotFoundHandler(), opts...)
+		// 检查是否为参数段 / Check if it's a parameter segment
+		if isParam, paramName := isParam(p); isParam {
+			// 创建或更新参数节点 / Create or update parameter node
+			if current.param == nil {
+				current.param = &ParamNode{
+					name: paramName,
+					node: NewNode(p, http.NotFoundHandler(), opts...),
+				}
+			} else {
+				// 如果参数节点已存在，更新参数名（如果不同）
+				// If parameter node exists, update parameter name (if different)
+				if current.param.name != paramName {
+					current.param.name = paramName
+				}
+			}
+			current = current.param.node
+		} else {
+			// 普通路径段，使用精确匹配 / Regular path segment, use exact match
+			if _, ok := current.next[p]; !ok {
+				current.next[p] = NewNode(p, http.NotFoundHandler(), opts...)
+			}
+			current = current.next[p]
 		}
-		current = current.next[p]
 	}
 	current.methods[options.Method], current.opts = h, opts
 }
@@ -129,30 +240,72 @@ func (node *Node) Add(path string, h http.HandlerFunc, opts ...Option) {
 //
 // 参数 / Parameters:
 //   - path: 要查找的路径 / Path to find
+//   - r: HTTP 请求（用于设置路径参数值）/ HTTP request (for setting path parameter values)
 //
 // 返回值 / Returns:
-//   - *Node: 最长匹配的节点 / Node with longest match
+//   - *Node: 匹配的节点 / Matched node
+//   - bool: 是否完全匹配（所有路径段都匹配）/ Whether it's a complete match (all path segments matched)
 //
 // 匹配原则 / Matching Rules:
-//   - /a/b/c/ 优先返回 /a/b/c/ / /a/b/c/ preferably returns /a/b/c/
-//   - 其次返回 /a/b/c / Then returns /a/b/c
-//   - 再返回 /a/b / Then returns /a/b
-//   - 再返回 /a / Then returns /a
-//   - 最后返回 / / Finally returns /
+//   - 精确匹配优先于参数匹配 / Exact match takes priority over parameter match
+//   - 静态路径优先于参数路径 / Static paths take priority over parameter paths
+//   - 如果匹配到参数，会自动调用 r.SetPathValue() 设置参数值
+//   - If a parameter is matched, r.SetPathValue() is automatically called to set the parameter value
 //
 // 示例 / Example:
 //
-//	node.Find("/api/users/123")  // 返回最长匹配的节点 / Returns longest matching node
-func (node *Node) Find(path string) *Node {
+//	node, matched := node.Find("/api/users/123", r)
+//	if matched {
+//	    // 完全匹配，可以使用 r.PathValue("id") 获取参数值
+//	    // Complete match, can use r.PathValue("id") to get parameter value
+//	}
+func (node *Node) Find(path string, r *http.Request) (*Node, bool) {
 	current := node
-	for _, p := range strings.Split(path, "/") {
-		if next, ok := current.next[p]; !ok {
-			break
-		} else {
-			current = next
+	segments := strings.Split(path, "/")
+
+	// 过滤空字符串（Split 会在开头和结尾产生空字符串）
+	// Filter empty strings (Split produces empty strings at start and end)
+	var cleanSegments []string
+	for _, seg := range segments {
+		if seg != "" {
+			cleanSegments = append(cleanSegments, seg)
 		}
 	}
-	return current
+
+	// 如果路径为空，直接返回当前节点
+	// If path is empty, return current node directly
+	if len(cleanSegments) == 0 {
+		return current, len(current.methods) > 0
+	}
+
+	// 遍历路径段进行匹配
+	// Traverse path segments for matching
+	for _, seg := range cleanSegments {
+		// 优先尝试精确匹配 / Try exact match first
+		if next, ok := current.next[seg]; ok {
+			current = next
+			continue
+		}
+
+		// 精确匹配失败，尝试参数匹配 / Exact match failed, try parameter match
+		if current.param != nil {
+			// 使用参数节点匹配，并设置参数值
+			// Use parameter node to match and set parameter value
+			if r != nil {
+				r.SetPathValue(current.param.name, seg)
+			}
+			current = current.param.node
+			continue
+		}
+
+		// 既没有精确匹配也没有参数匹配，返回当前最长匹配的节点
+		// Neither exact match nor parameter match, return current longest matched node
+		return current, false
+	}
+
+	// 所有路径段都匹配成功，检查是否有处理器
+	// All path segments matched successfully, check if there's a handler
+	return current, len(current.methods) > 0
 }
 
 // paths 获取当前节点的所有子路径
@@ -446,17 +599,18 @@ func (mux *ServeMux) Use(fn ...func(http.Handler) http.Handler) {
 //	mux.Route("/api/users", handler)
 //	http.ListenAndServe(":8080", mux)  // mux 实现了 http.Handler
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// 1. 在路由树中查找匹配的节点
-	// 1. Find matching node in routing tree
-	current := mux.root.Find(strings.TrimLeft(r.URL.Path, "/"))
+	// 1. 在路由树中查找匹配的节点（传入 r 用于设置路径参数）
+	// 1. Find matching node in routing tree (pass r for setting path parameters)
+	requestPath := strings.TrimLeft(r.URL.Path, "/")
+	current, matched := mux.root.Find(requestPath, r)
 	options := newOptions(mux.opts, current.opts...)
 
 	// 2. 选择合适的处理器
 	// 2. Select appropriate handler
 	var handler http.Handler
-	if len(current.methods) == 0 {
-		// 路由不存在，返回 404
-		// Route doesn't exist, return 404
+	if !matched || len(current.methods) == 0 {
+		// 路由不存在或未完全匹配，返回 404
+		// Route doesn't exist or not fully matched, return 404
 		handler = ErrHandler(http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	} else {
 		// 查找方法对应的处理器

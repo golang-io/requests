@@ -29,5 +29,5 @@ jobs:
       run: go test -v -race -coverprofile=coverage.txt ./... && go tool cover -html=coverage.txt -o coverage.html
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+      # 注意：对于公开仓库，token 参数是可选的，可以省略
+      # 对于私有仓库，需要添加 token 参数并在 GitHub 仓库设置中配置相应的 secret

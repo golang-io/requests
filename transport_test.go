@@ -43,7 +43,7 @@ func Test_Setup(t *testing.T) {
 			t.Error("len(setups)!= len(setups)")
 			return
 		}
-		for i := 0; i < len(setups); i++ {
+		for i := range len(setups) {
 			if setups[i] != wants[i] {
 				t.Errorf("setups=%v, wants=%v", setups[i], wants[i])
 				return
@@ -152,7 +152,7 @@ func TestTransportWithRealServer(t *testing.T) {
 	client := &http.Client{Transport: tr}
 
 	// 并发测试
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			resp, err := client.Get(server.URL)
 			if err != nil {

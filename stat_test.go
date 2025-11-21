@@ -635,7 +635,7 @@ func TestServeLoad_TLS_Performance(t *testing.T) {
 	start := time.Now()
 
 	// 运行多次测试
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		stat := serveLoad(w, req, start, nil)
 		if !strings.HasPrefix(stat.Response.URL, "https://") {
 			t.Errorf("第 %d 次测试失败，URL 应为 https:// 开头，实际: %s", i+1, stat.Response.URL)
@@ -651,7 +651,7 @@ func TestServeLoad_TLS_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, numGoroutines*numRequests)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(goroutineID int) {
 			defer wg.Done()
@@ -716,7 +716,7 @@ func BenchmarkServeLoad_TLS(b *testing.B) {
 	start := time.Now()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		serveLoad(w, req, start, nil)
 	}
 }
@@ -734,7 +734,7 @@ func BenchmarkServeLoad_HTTP(b *testing.B) {
 	start := time.Now()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		serveLoad(w, req, start, nil)
 	}
 }
@@ -752,7 +752,7 @@ func BenchmarkServeLoad_TLS_Detection(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		if r.TLS != nil {
 			scheme = "https://"
 		}

@@ -130,11 +130,9 @@ func Test_FormPost(t *testing.T) {
 }
 
 func Test_DoRequestRace(t *testing.T) {
-	opts := Options{}
 	ctx := context.Background()
-	t.Logf("%#v", opts)
 	sess := New(URL("http://httpbin.org/post")) //, Auth("user", "123456"))
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			_, _ = sess.DoRequest(ctx, MethodPost, Body(`{"a":"b"}`), Params(map[string]string{"1": "2/2"})) // nolint: errcheck
 		}()

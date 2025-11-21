@@ -182,7 +182,7 @@ func BenchmarkParseBody(b *testing.B) {
 	content := strings.Repeat("benchmark content for ParseBody", 100)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		body := io.NopCloser(strings.NewReader(content))
 		_, _ = ParseBody(body)
 	}
@@ -193,7 +193,7 @@ func BenchmarkCopyBody(b *testing.B) {
 	content := strings.Repeat("benchmark content for CopyBody", 100)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		body := io.NopCloser(strings.NewReader(content))
 		_, _, _ = CopyBody(body)
 	}

@@ -107,11 +107,11 @@ func TestResponseWriterConcurrency(t *testing.T) {
 	iterations := 100
 
 	wg.Add(workers)
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				content := []byte(fmt.Sprintf("worker%d-%d", id, j))
+			for j := range iterations {
+				content := fmt.Appendf(nil, "worker%d-%d", id, j)
 				_, err := w.Write(content)
 				if err != nil {
 					t.Errorf("Concurrent write failed: %v", err)
@@ -168,7 +168,7 @@ func BenchmarkResponseWriterWrite(b *testing.B) {
 	content := []byte("benchmark content")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		w.Write(content)
 	}
 }

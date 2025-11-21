@@ -873,7 +873,7 @@ func BenchmarkTrace_HTTP100Continue(b *testing.B) {
 	transport := wrapper(http.DefaultTransport)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		body := strings.NewReader("body")
 		req, _ := http.NewRequest("POST", server.URL, body)
 		req.Header.Set("Expect", "100-continue")
@@ -900,7 +900,7 @@ func BenchmarkTrace_ErrorHandling(b *testing.B) {
 	transport := wrapper(http.DefaultTransport)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		resp, err := transport.RoundTrip(req)
 		if resp != nil {
 			resp.Body.Close()
@@ -921,7 +921,7 @@ func BenchmarkTrace_ErrorHandlingPanic(b *testing.B) {
 	transport := wrapper(http.DefaultTransport)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		resp, err := transport.RoundTrip(req)
 		if resp != nil {
 			resp.Body.Close()
@@ -945,7 +945,7 @@ func BenchmarkTrace_HTTP1xxResponses(b *testing.B) {
 	transport := wrapper(http.DefaultTransport)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		resp, err := transport.RoundTrip(req)
 		if err != nil {
 			b.Fatal(err)
