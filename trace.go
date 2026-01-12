@@ -10,6 +10,7 @@ import (
 	"net/http/httptrace"
 	"net/http/httputil"
 	"net/textproto"
+	"strings"
 )
 
 // trace 是HTTP客户端追踪的钩子集合，用于在HTTP请求的各个阶段运行回调函数
@@ -290,7 +291,7 @@ func traceLv(used bool, mLimit ...int) func(http.RoundTripper) http.RoundTripper
 				return nil, err
 			}
 
-			// 答应响应头和响应体长度
+			// 打印响应头
 			Log("< %s %s", resp.Proto, resp.Status)
 			for k, vs := range resp.Header {
 				for _, v := range vs {
@@ -298,6 +299,15 @@ func traceLv(used bool, mLimit ...int) func(http.RoundTripper) http.RoundTripper
 				}
 			}
 
+			// 检测是否为流式响应，如果是则跳过响应体复制以保持流式特性
+			// Detect if it's a streaming response, skip body copying to preserve streaming behavior
+			if isStreaming(resp) {
+				Log("< [Streaming Response - Body not traced to preserve real-time streaming]")
+				return resp, nil
+			}
+
+			// 非流式响应：正常复制和打印响应体
+			// Non-streaming response: normally copy and print response body
 			buf, r, err := CopyBody(resp.Body)
 			if err != nil {
 				Log("! response error: %w", err)
@@ -309,4 +319,51 @@ func traceLv(used bool, mLimit ...int) func(http.RoundTripper) http.RoundTripper
 			return resp, nil
 		})
 	}
+}
+
+// isStreaming 检测响应是否为流式响应
+// 流式响应需要实时处理，不应该被完整复制到内存
+//
+// isStreaming detects if the response is a streaming response
+// Streaming responses need real-time processing and should not be fully copied to memory
+//
+// 参数 / Parameters:
+//   - resp: *http.Response - HTTP 响应对象 / HTTP response object
+//
+// 返回值 / Returns:
+//   - bool: true 表示是流式响应，false 表示非流式响应 / true for streaming response, false for non-streaming
+//
+// 检测规则 / Detection Rules:
+//   - Content-Type 包含 "text/event-stream" (Server-Sent Events)
+//   - Content-Type 包含 "application/stream" (通用流式响应)
+//   - Content-Type 包含 "application/x-ndjson" (Newline Delimited JSON)
+func isStreaming(resp *http.Response) bool {
+	contentType := resp.Header.Get("Content-Type")
+	contentType = strings.ToLower(contentType)
+
+	// 检测常见的流式响应类型
+	// Detect common streaming response types
+	streamingTypes := []string{
+		"text/event-stream",    // Server-Sent Events (SSE) - OpenAI streaming常用
+		"application/stream",   // Generic streaming
+		"application/x-ndjson", // Newline Delimited JSON
+		"application/x-stream", // Generic stream
+		"text/stream",          // Text streaming variant
+	}
+
+	for _, streamType := range streamingTypes {
+		if strings.Contains(contentType, streamType) {
+			return true
+		}
+	}
+
+	// 额外检查：如果 Content-Type 是 text/plain 且使用 chunked 传输且没有 Content-Length
+	// 这可能是某些 API 的流式响应（如 OpenAI 在某些情况下）
+	// Additional check: if Content-Type is text/plain with chunked transfer and no Content-Length
+	// This might be streaming from some APIs (e.g., OpenAI in some cases)
+	chunked := strings.Contains(strings.ToLower(resp.Header.Get("Transfer-Encoding")), "chunked")
+	if strings.Contains(contentType, "text/plain") && chunked && resp.ContentLength == -1 {
+		return true
+	}
+	return false
 }

@@ -2,10 +2,13 @@ package requests
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestNewResponse 测试newResponse函数的基本功能
@@ -77,7 +80,7 @@ func TestStreamRead(t *testing.T) {
 			reader := strings.NewReader(tt.input)
 			var lines []string
 
-			gotLen, err := streamRead(reader, func(_ int64, data []byte) error {
+			gotLen, err := streamRead(context.Background(), reader, func(_ int64, data []byte) error {
 				lines = append(lines, string(bytes.TrimRight(data, "\n")))
 				return nil
 			})
@@ -98,7 +101,7 @@ func TestStreamReadError(t *testing.T) {
 	reader := strings.NewReader("test\ndata\n")
 	expectedErr := errors.New("callback error")
 
-	_, err := streamRead(reader, func(_ int64, _ []byte) error {
+	_, err := streamRead(context.Background(), reader, func(_ int64, _ []byte) error {
 		return expectedErr
 	})
 
@@ -108,13 +111,79 @@ func TestStreamReadError(t *testing.T) {
 
 	// 测试读取错误的情况
 	errorReader := &errorReader{err: errors.New("read error")}
-	_, err = streamRead(errorReader, func(_ int64, _ []byte) error {
+	_, err = streamRead(context.Background(), errorReader, func(_ int64, _ []byte) error {
 		return nil
 	})
 
 	if err == nil || !strings.Contains(err.Error(), "read error") {
 		t.Errorf("Expected read error, got %v", err)
 	}
+}
+
+// TestStreamReadContextCancel 测试streamRead函数的Context取消功能
+// TestStreamReadContextCancel tests Context cancellation in streamRead function
+func TestStreamReadContextCancel(t *testing.T) {
+	// 创建一个会持续产生数据的读取器
+	// Create a reader that continuously produces data
+	infiniteReader := &infiniteStringReader{data: "line\n"}
+
+	// 创建可取消的 Context
+	// Create a cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 在另一个 goroutine 中延迟取消
+	// Cancel after a delay in another goroutine
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	// 开始流式读取，应该会被 Context 取消中断
+	// Start streaming read, should be interrupted by context cancellation
+	processedLines := 0
+	_, err := streamRead(ctx, infiniteReader, func(_ int64, _ []byte) error {
+		processedLines++
+		time.Sleep(10 * time.Millisecond) // 模拟处理时间
+		return nil
+	})
+
+	// 验证返回了 context.Canceled 错误
+	// Verify that context.Canceled error is returned
+	if err == nil {
+		t.Error("Expected context.Canceled error, got nil")
+	} else if err != context.Canceled {
+		t.Errorf("Expected context.Canceled error, got %v", err)
+	}
+
+	// 验证确实处理了一些行（在取消之前）
+	// Verify that some lines were processed before cancellation
+	if processedLines == 0 {
+		t.Error("Expected at least some lines to be processed before cancellation")
+	}
+}
+
+// infiniteStringReader 是一个无限读取器，用于测试
+// infiniteStringReader is an infinite reader for testing
+type infiniteStringReader struct {
+	data string
+	pos  int
+}
+
+func (r *infiniteStringReader) Read(p []byte) (n int, err error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	// 循环返回数据
+	// Loop and return data
+	for i := 0; i < len(p); i++ {
+		p[i] = r.data[r.pos%len(r.data)]
+		r.pos++
+		if r.pos >= len(r.data) {
+			r.pos = 0
+		}
+	}
+	return len(p), nil
 }
 
 // 用于测试的错误读取器
@@ -477,4 +546,248 @@ func TestResponseJSON_WhitespaceContent(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStreamContextWithDoRequest 测试完整的 DoRequest + Stream + Context 流程
+// TestStreamContextWithDoRequest tests the complete DoRequest + Stream + Context flow
+func TestStreamContextWithDoRequest(t *testing.T) {
+	// 创建测试服务器，返回多行数据
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 发送 50 行数据
+		for i := 0; i < 50; i++ {
+			if _, err := w.Write([]byte("line\n")); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+			time.Sleep(5 * time.Millisecond)
+		}
+	}))
+	defer server.Close()
+
+	// 测试场景 1: 正常完成（Context 不取消）
+	t.Run("正常完成流程", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		sess := New(URL(server.URL))
+
+		var processedLines int64
+		resp, err := sess.DoRequest(ctx,
+			Stream(func(lineNum int64, data []byte) error {
+				processedLines = lineNum
+				return nil
+			}),
+		)
+
+		// 应该成功完成
+		if err != nil {
+			t.Errorf("Expected no error for normal completion, got %v", err)
+		}
+
+		// 应该处理了所有行（可能多一行，因为最后一行可能没有换行符）
+		// 实际处理的行数应该接近 50
+		if processedLines < 45 {
+			t.Errorf("Expected at least 45 lines processed, got %d", processedLines)
+		}
+
+		// 验证响应对象
+		if resp == nil {
+			t.Error("Expected response object, got nil")
+		}
+
+		// 在流式模式下，Body 应该是 http.NoBody（在 streamRoundTrip 中设置）
+		// 但 DoRequest 可能会重新包装，所以这里只验证响应对象存在
+		if resp.Response == nil {
+			t.Error("Expected response.Response to exist")
+		}
+
+		t.Logf("正常完成测试通过: 处理了 %d 行", processedLines)
+	})
+
+	// 测试场景 2: 超时中断
+	t.Run("超时中断流程", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		sess := New(URL(server.URL))
+
+		var processedLines int64
+		resp, err := sess.DoRequest(ctx,
+			Stream(func(lineNum int64, data []byte) error {
+				processedLines = lineNum
+				time.Sleep(2 * time.Millisecond)
+				return nil
+			}),
+		)
+
+		// 应该返回超时错误
+		if err != context.DeadlineExceeded {
+			t.Errorf("Expected context.DeadlineExceeded, got %v", err)
+		}
+
+		// 应该处理了部分行（因为超时）
+		if processedLines == 0 {
+			t.Error("Expected at least some lines to be processed before timeout")
+		}
+
+		if processedLines >= 50 {
+			t.Errorf("Expected processed lines < 50 (due to timeout), got %d", processedLines)
+		}
+
+		// 验证响应对象存在
+		if resp == nil {
+			t.Error("Expected response object, got nil")
+		}
+
+		t.Logf("超时中断测试通过: 处理了 %d 行后超时", processedLines)
+	})
+
+	// 测试场景 3: 手动取消
+	t.Run("手动取消流程", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		sess := New(URL(server.URL))
+
+		var processedLines int64
+
+		// 在另一个 goroutine 中延迟取消
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			cancel()
+		}()
+
+		resp, err := sess.DoRequest(ctx,
+			Stream(func(lineNum int64, data []byte) error {
+				processedLines = lineNum
+				time.Sleep(2 * time.Millisecond)
+				return nil
+			}),
+		)
+
+		// 应该返回取消错误
+		if err != context.Canceled {
+			t.Errorf("Expected context.Canceled, got %v", err)
+		}
+
+		// 应该处理了部分行
+		if processedLines == 0 {
+			t.Error("Expected at least some lines to be processed before cancellation")
+		}
+
+		// 验证响应对象存在
+		if resp == nil {
+			t.Error("Expected response object, got nil")
+		}
+
+		t.Logf("手动取消测试通过: 处理了 %d 行后取消", processedLines)
+	})
+}
+
+// TestStreamContextEdgeCases tests edge cases for stream context.
+func TestStreamContextEdgeCases(t *testing.T) {
+	t.Run("immediately cancelled context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // cancel immediately
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("line1\nline2\n"))
+		}))
+		defer server.Close()
+
+		sess := New(URL(server.URL))
+
+		var callbackCalled bool
+		_, err := sess.DoRequest(ctx,
+			Stream(func(_ int64, _ []byte) error {
+				callbackCalled = true
+				return nil
+			}),
+		)
+
+		// 应该返回取消错误（可能是 context.Canceled 或包含 "context canceled" 的错误）
+		if err == nil {
+			t.Error("Expected error for immediately cancelled context, got nil")
+		} else if err != context.Canceled && err.Error() != "context canceled" {
+			// HTTP 客户端可能会包装错误，所以检查错误信息
+			if !strings.Contains(err.Error(), "context canceled") {
+				t.Errorf("Expected context.Canceled or 'context canceled' error, got %v", err)
+			}
+		}
+
+		// 回调可能被调用（如果 HTTP 请求已经完成），也可能不被调用（如果 HTTP 请求还没开始）
+		// 这个行为取决于 HTTP 请求的时机
+		t.Logf("回调是否被调用: %v", callbackCalled)
+	})
+
+	// 测试空响应体
+	t.Run("空响应体", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 不写入任何数据
+		}))
+		defer server.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		sess := New(URL(server.URL))
+
+		var callbackCalled bool
+		resp, err := sess.DoRequest(ctx,
+			Stream(func(_ int64, _ []byte) error {
+				callbackCalled = true
+				return nil
+			}),
+		)
+
+		// 应该成功完成（没有数据，所以不会超时）
+		if err != nil {
+			t.Errorf("Expected no error for empty response, got %v", err)
+		}
+
+		// 回调可能被调用（如果响应体有换行符等），也可能不被调用
+		// 这个行为取决于响应体的具体内容
+		t.Logf("空响应体测试: 回调是否被调用: %v", callbackCalled)
+
+		// 验证响应对象存在
+		if resp == nil {
+			t.Error("Expected response object, got nil")
+		}
+	})
+
+	// 测试单行数据
+	t.Run("单行数据", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("single line\n"))
+		}))
+		defer server.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		sess := New(URL(server.URL))
+
+		var processedLines int64
+		resp, err := sess.DoRequest(ctx,
+			Stream(func(lineNum int64, data []byte) error {
+				processedLines = lineNum
+				return nil
+			}),
+		)
+
+		// 应该成功完成
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		// 应该处理了 1-2 行（取决于最后是否有换行符）
+		if processedLines < 1 || processedLines > 2 {
+			t.Errorf("Expected 1-2 lines processed, got %d", processedLines)
+		}
+
+		// 验证响应对象存在
+		if resp == nil {
+			t.Error("Expected response object, got nil")
+		}
+	})
 }

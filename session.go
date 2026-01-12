@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"time"
 )
 
 // Session 是 HTTP 客户端会话管理器
@@ -211,6 +212,8 @@ func (s *Session) Do(ctx context.Context, opts ...Option) (*http.Response, error
 func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, error) {
 	options, resp := newOptions(s.opts, opts...), newResponse(nil)
 
+	defer func() { resp.Cost = time.Since(resp.StartAt) }()
+
 	// 创建 HTTP 请求
 	// Create HTTP request
 	resp.Request, resp.Err = NewRequestWithContext(ctx, options)
@@ -241,11 +244,6 @@ func (s *Session) DoRequest(ctx context.Context, opts ...Option) (*Response, err
 	// 重新包装 Body，使其仍然可读
 	// Re-wrap Body to make it still readable
 	resp.Response.Body = io.NopCloser(bytes.NewReader(resp.Content.Bytes()))
-
-	// 计算请求耗时
-	// Calculate request duration
-	resp.Cost = resp.StartAt.Sub(resp.StartAt)
-
 	return resp, resp.Err
 }
 

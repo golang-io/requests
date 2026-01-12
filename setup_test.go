@@ -68,7 +68,7 @@ func BenchmarkStreamRead(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		reader := strings.NewReader(data)
-		_, err := streamRead(reader, func(_ int64, _ []byte) error {
+		_, err := streamRead(context.Background(), reader, func(_ int64, _ []byte) error {
 			return nil
 		})
 		if err != nil {
@@ -215,4 +215,36 @@ func TestStreamRoundTripError(t *testing.T) {
 			t.Errorf("预期状态码 200，得到 %d", resp.StatusCode)
 		}
 	})
+}
+
+// TestStreamRoundTripWithNoBody 测试流式处理后 Body 是否为 http.NoBody
+// TestStreamRoundTripWithNoBody tests if Body is http.NoBody after streaming
+func TestStreamRoundTripWithNoBody(t *testing.T) {
+	responseBody := "line1\nline2\nline3"
+	mockTransport := RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(strings.NewReader(responseBody)),
+		}, nil
+	})
+
+	req, _ := http.NewRequest("GET", "http://example.com", nil)
+	middleware := streamRoundTrip(func(_ int64, _ []byte) error {
+		return nil
+	})
+
+	resp, err := middleware(mockTransport).RoundTrip(req)
+	if err != nil {
+		t.Fatalf("RoundTrip failed: %v", err)
+	}
+
+	// 验证 Body 是否为 http.NoBody
+	if resp.Body != http.NoBody {
+		t.Errorf("Expected Body to be http.NoBody, got %v", resp.Body)
+	}
+
+	// 验证可以安全地关闭
+	if err := resp.Body.Close(); err != nil {
+		t.Errorf("Failed to close http.NoBody: %v", err)
+	}
 }

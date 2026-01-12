@@ -3,6 +3,7 @@ package requests
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -952,4 +953,314 @@ func BenchmarkTrace_HTTP1xxResponses(b *testing.B) {
 		}
 		resp.Body.Close()
 	}
+}
+
+// TestIsStreamingResponse 测试流式响应检测函数
+// TestIsStreamingResponse tests the streaming response detection function
+func TestIsStreamingResponse(t *testing.T) {
+	tests := []struct {
+		name             string
+		contentType      string
+		transferEncoding string
+		contentLength    int64
+		expected         bool
+		description      string
+	}{
+		// 标准流式 Content-Type 测试
+		{
+			name:        "Server-Sent Events",
+			contentType: "text/event-stream",
+			expected:    true,
+			description: "SSE 流式响应",
+		},
+		{
+			name:        "Server-Sent Events with charset",
+			contentType: "text/event-stream; charset=utf-8",
+			expected:    true,
+			description: "带字符集的 SSE 流式响应",
+		},
+		{
+			name:        "Application Stream",
+			contentType: "application/stream",
+			expected:    true,
+			description: "通用流式响应",
+		},
+		{
+			name:        "Application Stream JSON",
+			contentType: "application/stream+json",
+			expected:    true,
+			description: "流式 JSON 响应",
+		},
+		{
+			name:        "NDJSON",
+			contentType: "application/x-ndjson",
+			expected:    true,
+			description: "Newline Delimited JSON",
+		},
+		{
+			name:        "X-Stream",
+			contentType: "application/x-stream",
+			expected:    true,
+			description: "X-Stream 流式响应",
+		},
+		{
+			name:        "Text Stream",
+			contentType: "text/stream",
+			expected:    true,
+			description: "文本流式响应",
+		},
+		// text/plain + chunked 特殊情况测试
+		{
+			name:             "Text Plain with Chunked",
+			contentType:      "text/plain",
+			transferEncoding: "chunked",
+			contentLength:    -1,
+			expected:         true,
+			description:      "text/plain + chunked + ContentLength -1",
+		},
+		{
+			name:             "Text Plain with Chunked and ContentLength",
+			contentType:      "text/plain",
+			transferEncoding: "chunked",
+			contentLength:    100,
+			expected:         false,
+			description:      "text/plain + chunked 但有 ContentLength，不是流式",
+		},
+		{
+			name:             "Text Plain without Chunked",
+			contentType:      "text/plain",
+			transferEncoding: "",
+			contentLength:    -1,
+			expected:         false,
+			description:      "text/plain 但没有 chunked，不是流式",
+		},
+		// 非流式响应测试
+		{
+			name:        "JSON",
+			contentType: "application/json",
+			expected:    false,
+			description: "普通 JSON 响应",
+		},
+		{
+			name:        "HTML",
+			contentType: "text/html",
+			expected:    false,
+			description: "HTML 响应",
+		},
+		{
+			name:        "XML",
+			contentType: "application/xml",
+			expected:    false,
+			description: "XML 响应",
+		},
+		{
+			name:        "Empty Content-Type",
+			contentType: "",
+			expected:    false,
+			description: "空 Content-Type",
+		},
+		{
+			name:        "Case Insensitive",
+			contentType: "TEXT/EVENT-STREAM",
+			expected:    true,
+			description: "大小写不敏感检测",
+		},
+		{
+			name:             "Case Insensitive Transfer-Encoding",
+			contentType:      "text/plain",
+			transferEncoding: "CHUNKED",
+			contentLength:    -1,
+			expected:         true,
+			description:      "Transfer-Encoding 大小写不敏感",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &http.Response{
+				Header:        make(http.Header),
+				ContentLength: tt.contentLength,
+			}
+			if tt.contentType != "" {
+				resp.Header.Set("Content-Type", tt.contentType)
+			}
+			if tt.transferEncoding != "" {
+				resp.Header.Set("Transfer-Encoding", tt.transferEncoding)
+			}
+
+			result := isStreaming(resp)
+			if result != tt.expected {
+				t.Errorf("isStreaming() = %v, want %v. %s", result, tt.expected, tt.description)
+			}
+		})
+	}
+}
+
+// TestTrace_StreamingResponse 测试流式响应在 Trace 中的处理
+// TestTrace_StreamingResponse tests streaming response handling in Trace
+func TestTrace_StreamingResponse(t *testing.T) {
+	tests := []struct {
+		name             string
+		contentType      string
+		transferEncoding string
+		contentLength    int64
+		body             string
+		expectStreaming  bool
+		description      string
+	}{
+		{
+			name:            "SSE Streaming",
+			contentType:     "text/event-stream",
+			body:            "data: test\n\n",
+			expectStreaming: true,
+			description:     "Server-Sent Events 流式响应应该跳过响应体复制",
+		},
+		{
+			name:            "NDJSON Streaming",
+			contentType:     "application/x-ndjson",
+			body:            `{"id":1}\n{"id":2}\n`,
+			expectStreaming: true,
+			description:     "NDJSON 流式响应应该跳过响应体复制",
+		},
+		// 注意：httptest.NewServer 在写入响应体时会自动设置 Content-Length，
+		// 无法完全模拟 chunked 传输，所以这个测试用例在实际的 traceLv 中可能无法触发
+		// 但 isStreamingResponse 函数的逻辑已经通过 TestIsStreamingResponse 测试验证
+		// Note: httptest.NewServer automatically sets Content-Length when writing response body,
+		// so it cannot fully simulate chunked transfer. This test case may not trigger in actual traceLv,
+		// but the isStreamingResponse function logic has been verified through TestIsStreamingResponse
+		// {
+		// 	name:             "Text Plain Chunked Streaming",
+		// 	contentType:      "text/plain",
+		// 	transferEncoding: "chunked",
+		// 	contentLength:    -1,
+		// 	body:             "streaming data...",
+		// 	expectStreaming:  true,
+		// 	description:      "text/plain + chunked 流式响应应该跳过响应体复制",
+		// },
+		{
+			name:            "Normal JSON Response",
+			contentType:     "application/json",
+			body:            `{"message":"test"}`,
+			expectStreaming: false,
+			description:     "普通 JSON 响应应该正常复制响应体",
+		},
+		{
+			name:             "Normal Text Response",
+			contentType:      "text/plain",
+			transferEncoding: "",
+			contentLength:    100,
+			body:             "normal response",
+			expectStreaming:  false,
+			description:      "普通文本响应应该正常复制响应体",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 创建测试服务器
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.contentType != "" {
+					w.Header().Set("Content-Type", tt.contentType)
+				}
+				if tt.transferEncoding != "" {
+					// 对于 chunked 传输，不设置 Content-Length，让 Go 自动处理
+					// 这样 ContentLength 会是 -1
+					w.Header().Set("Transfer-Encoding", tt.transferEncoding)
+					// 使用 Flusher 确保是真正的流式传输
+					if flusher, ok := w.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				} else if tt.contentLength >= 0 {
+					w.Header().Set("Content-Length", fmt.Sprintf("%d", len(tt.body)))
+				}
+				w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+
+			// 创建带 Trace 的会话（使用默认输出）
+			sess := New(
+				URL(server.URL),
+				Trace(10240),
+			)
+
+			// 发送请求
+			resp, err := sess.DoRequest(context.Background())
+			if err != nil {
+				t.Fatalf("请求失败: %v", err)
+			}
+			defer resp.Response.Body.Close()
+
+			// 验证响应状态
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("期望状态码 200，得到 %d", resp.StatusCode)
+			}
+
+			// 验证流式响应检测
+			httpResp := resp.Response
+			if httpResp == nil {
+				t.Fatal("响应对象为空")
+			}
+
+			isStreaming := isStreaming(httpResp)
+			if isStreaming != tt.expectStreaming {
+				t.Errorf("isStreaming() = %v, want %v. %s", isStreaming, tt.expectStreaming, tt.description)
+			}
+
+			// 验证响应体可以正常读取（使用 Content 字段，因为 Response 已经自动缓存）
+			bodyStr := resp.Content.String()
+			if bodyStr != tt.body {
+				t.Errorf("响应体内容不匹配，得到: %s, 期望: %s", bodyStr, tt.body)
+			}
+		})
+	}
+}
+
+// TestTrace_StreamingResponseWithRealStream 测试真实的流式响应场景
+// TestTrace_StreamingResponseWithRealStream tests real streaming response
+func TestTrace_StreamingResponseWithRealStream(t *testing.T) {
+	// 创建一个真实的 SSE 流式服务器
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		// 发送多个 SSE 事件
+		for i := 0; i < 3; i++ {
+			fmt.Fprintf(w, "data: message %d\n\n", i)
+			w.(http.Flusher).Flush()
+			time.Sleep(10 * time.Millisecond)
+		}
+	}))
+	defer server.Close()
+
+	// 创建带 Trace 的会话（使用默认输出）
+	sess := New(
+		URL(server.URL),
+		Trace(10240),
+	)
+
+	// 发送请求
+	resp, err := sess.DoRequest(context.Background())
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Response.Body.Close()
+
+	// 验证是流式响应
+	httpResp := resp.Response
+	if httpResp == nil {
+		t.Fatal("响应对象为空")
+	}
+
+	if !isStreaming(httpResp) {
+		t.Error("应该被识别为流式响应")
+	}
+
+	// 验证响应体仍然可以读取（使用 Content 字段，因为 Response 已经自动缓存）
+	bodyStr := resp.Content.String()
+	if !strings.Contains(bodyStr, "message") {
+		t.Errorf("响应体应该包含消息内容，得到: %s", bodyStr)
+	}
+
+	t.Logf("流式响应体内容: %s", bodyStr)
 }

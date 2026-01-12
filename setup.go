@@ -3,9 +3,7 @@
 package requests
 
 import (
-	"bytes"
 	"context"
-	"io"
 	"net/http"
 )
 
@@ -59,7 +57,7 @@ func printRoundTripper(f func(ctx context.Context, stat *Stat)) func(http.RoundT
 // 行为特性 / Behavior:
 //   - 按行流式读取响应体 / Reads response body line by line in streaming mode
 //   - 不缓存完整响应体，节省内存 / Does not cache full response body, saves memory
-//   - 响应体被替换为"[stream]"标识 / Response body is replaced with "[stream]" marker
+//   - 响应体被替换为 http.NoBody，表示已被流式处理 / Response body is replaced with http.NoBody to indicate it has been streamed
 //   - 回调函数返回错误时立即停止处理 / Stops processing immediately if callback returns error
 //
 // 适用场景 / Use Cases:
@@ -91,10 +89,20 @@ func streamRoundTrip(fn func(i int64, raw []byte) error) func(http.RoundTripper)
 				return resp.Response, resp.Err
 			}
 
-			if resp.Response.ContentLength, resp.Err = streamRead(resp.Response.Body, fn); resp.Err != nil {
+			// 传递请求的 Context 给 streamRead，支持取消操作
+			// Pass request's Context to streamRead to support cancellation
+			if resp.Response.ContentLength, resp.Err = streamRead(r.Context(), resp.Response.Body, fn); resp.Err != nil {
 				return resp.Response, resp.Err
 			}
-			resp.Response.Body = io.NopCloser(bytes.NewReader([]byte("[stream]")))
+
+			// 关闭原始 Body（streamRead 已经消费完）
+			// Close original Body (streamRead has already consumed it)
+			resp.Response.Body.Close()
+
+			// 使用 http.NoBody 表示 Body 已被流式处理，没有可读内容
+			// Use http.NoBody to indicate Body has been streamed and has no readable content
+			resp.Response.Body = http.NoBody
+
 			return resp.Response, resp.Err
 		})
 	}

@@ -296,3 +296,72 @@ func TestSession_NilHandling(t *testing.T) {
 		})
 	}
 }
+
+// TestDoRequestWithStream 测试 DoRequest 与 Stream 的交互
+// TestDoRequestWithStream tests the interaction between DoRequest and Stream
+func TestDoRequestWithStream(t *testing.T) {
+	// 创建一个测试服务器
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("line1\nline2\nline3\n"))
+	}))
+	defer server.Close()
+
+	sess := New(URL(server.URL))
+
+	// 测试流式模式
+	t.Run("流式模式", func(t *testing.T) {
+		var processedLines []string
+		resp, err := sess.DoRequest(context.Background(),
+			Stream(func(lineNum int64, line []byte) error {
+				processedLines = append(processedLines, string(line))
+				return nil
+			}),
+		)
+
+		if err != nil {
+			t.Fatalf("DoRequest failed: %v", err)
+		}
+
+		// 验证处理的行数（包括换行符）
+		if len(processedLines) < 3 {
+			t.Errorf("Expected at least 3 lines processed, got %d", len(processedLines))
+		}
+
+		// 验证 Body 是 http.NoBody
+		if responseBody, err := io.ReadAll(resp.Response.Body); err != nil || string(responseBody) != "" {
+			t.Errorf("Expected Body to be http.NoBody, got %v, %#v", resp.Response.Body, resp.Response.Body)
+		}
+
+		// 验证 Content 为空（流式模式下不读取到 Content）
+		if resp.Content.Len() != 0 {
+			t.Errorf("Expected Content to be empty in streaming mode, got %d bytes", resp.Content.Len())
+		}
+
+		// 验证可以安全地关闭 Body
+		if err := resp.Response.Body.Close(); err != nil {
+			t.Errorf("Failed to close http.NoBody: %v", err)
+		}
+	})
+
+	// 测试非流式模式（确保不受影响）
+	t.Run("非流式模式", func(t *testing.T) {
+		resp, err := sess.DoRequest(context.Background())
+
+		if err != nil {
+			t.Fatalf("DoRequest failed: %v", err)
+		}
+
+		// 验证 Content 包含数据
+		if resp.Content.Len() == 0 {
+			t.Error("Expected Content to contain data in non-streaming mode")
+		}
+		if responseBody, err := io.ReadAll(resp.Response.Body); err != nil || string(responseBody) != "line1\nline2\nline3\n" {
+			t.Errorf("Expected Body to be 'line1\nline2\nline3\n', got %s", string(responseBody))
+		}
+		// 验证 Body 不是 http.NoBody
+		if resp.Response.Body == http.NoBody {
+			t.Error("Expected Body not to be http.NoBody in non-streaming mode")
+		}
+	})
+}

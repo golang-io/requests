@@ -26,7 +26,7 @@ Requests is inspired by Python's famous `requests` library, bringing a more eleg
 
 - 🔒 **Automatic Safe Body Close** - No more `resp.Body.Close()` concerns
 - 📦 **Zero External Dependencies** - Only depends on Go standard library
-- 🌊 **Streaming Downloads** - Efficient handling of large files
+- 🌊 **Streaming Downloads** - Efficient handling of large files with Context cancellation support
 - 🔄 **Chunked HTTP Requests** - Support for streaming uploads
 - 🔗 **Keep-Alive & Connection Pooling** - Automatic connection reuse management
 - 🍪 **Sessions with Cookie Persistence** - Easy session management
@@ -285,6 +285,22 @@ resp, _ := sess.DoRequest(ctx,
         return nil
     }),
 )
+
+// Streaming with Context cancellation support
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+resp, err := sess.DoRequest(ctx,
+    requests.Path("/large-file.zip"),
+    requests.Stream(func(lineNum int64, data []byte) error {
+        // Processing will stop automatically if context is cancelled
+        file.Write(data)
+        return nil
+    }),
+)
+if err == context.DeadlineExceeded {
+    log.Println("Stream download timeout")
+}
 ```
 
 ### Timeout Control

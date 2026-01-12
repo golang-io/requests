@@ -3,6 +3,7 @@ package requests
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -147,30 +148,42 @@ func (resp *Response) Stat() *Stat {
 //   - 使用 1MB 缓冲，提高读取效率 / Uses 1MB buffer for efficient reading
 //   - 按换行符分割数据 / Splits data by newline character
 //   - 支持边读边处理，减少内存占用 / Supports read-and-process, reducing memory usage
+//   - 支持 Context 取消，可中断长时间运行的流式处理 / Supports Context cancellation to interrupt long-running stream processing
 //   - 适用于大文件下载、日志流等场景 / Suitable for large file downloads, log streams, etc.
 //
 // 参数 / Parameters:
+//   - ctx: 上下文对象，用于取消操作 / Context for cancellation
 //   - reader: 输入的数据流 / Input data stream
 //   - fn: 处理每一行数据的回调函数，参数为(行号, 行内容) / Callback function to process each line, parameters: (line number, line content)
 //
 // 返回值 / Returns:
 //   - int64: 读取的总字节数 / Total bytes read
-//   - error: 读取或处理过程中的错误 / Error during reading or processing
+//   - error: 读取或处理过程中的错误，如果 Context 被取消则返回 context.Canceled / Error during reading or processing, returns context.Canceled if context is cancelled
 //
 // 示例 / Example:
 //
 //	sess := requests.New(requests.URL("https://example.com/large-file.txt"))
-//	_, err := sess.DoRequest(context.Background(),
+//	ctx, cancel := context.WithCancel(context.Background())
+//	defer cancel()
+//	_, err := sess.DoRequest(ctx,
 //	    requests.Stream(func(lineNum int64, line []byte) error {
 //	        fmt.Printf("Line %d: %s", lineNum, line)
 //	        return nil
 //	    }),
 //	)
-func streamRead(reader io.Reader, fn func(int64, []byte) error) (int64, error) {
+func streamRead(ctx context.Context, reader io.Reader, fn func(int64, []byte) error) (int64, error) {
 	// 创建一个 1MB 缓冲的读取器，提高大文件读取性能
 	// Create a 1MB buffered reader for better performance with large files
 	i, cnt, r := int64(0), int64(0), bufio.NewReaderSize(reader, 1024*1024)
 	for {
+		// 检查 Context 是否已取消
+		// Check if context is cancelled
+		select {
+		case <-ctx.Done():
+			return cnt, ctx.Err()
+		default:
+		}
+
 		// 读取直到遇到换行符 (ASCII 10 = '\n')
 		// Read until newline character (ASCII 10 = '\n')
 		raw, err1 := r.ReadBytes(10)

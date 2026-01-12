@@ -26,7 +26,7 @@ Requests 受 Python 著名的 `requests` 库启发，为 Go 带来了更优雅�
 
 - 🔒 **自动安全关闭** `resp.Body`（无需担心资源泄漏）
 - 📦 **零外部依赖**（仅依赖 Go 标准库）
-- 🌊 **流式下载支持**（高效处理大文件）
+- 🌊 **流式下载支持**（高效处理大文件，支持 Context 取消）
 - 🔄 **分块 HTTP 请求**（支持流式上传）
 - 🔗 **Keep-Alive 和连接池**（自动管理连接复用）
 - 🍪 **持久化 Cookie 会话**（会话管理简单易用）
@@ -285,6 +285,22 @@ resp, _ := sess.DoRequest(ctx,
         return nil
     }),
 )
+
+// 流式下载支持 Context 取消
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+resp, err := sess.DoRequest(ctx,
+    requests.Path("/large-file.zip"),
+    requests.Stream(func(lineNum int64, data []byte) error {
+        // 如果 Context 被取消，流式处理会自动停止
+        file.Write(data)
+        return nil
+    }),
+)
+if err == context.DeadlineExceeded {
+    log.Println("流式下载超时")
+}
 ```
 
 ### 超时控制
