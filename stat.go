@@ -6,17 +6,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // RequestId 是用于跟踪请求的HTTP头字段名称
 // RequestId is the HTTP header field name used for request tracking
 const RequestId = "Request-Id"
-
-// dateTime 是统计信息中使用的时间格式
-// dateTime is the time format used in statistics
-const dateTime = "2006-01-02 15:04:05.000"
 
 // Stat 是HTTP请求统计信息结构，记录了请求和响应的完整信息
 // 该结构在客户端和服务器端都可以使用，但某些字段的含义略有不同
@@ -198,7 +198,7 @@ func (stat *Stat) Print() string {
 //   - *Stat: 统计信息对象 / Statistics object
 func responseLoad(resp *Response) *Stat {
 	stat := &Stat{
-		StartAt: resp.StartAt.Format(dateTime),
+		StartAt: resp.StartAt.Format(time.RFC3339),
 		Cost:    time.Since(resp.StartAt).Milliseconds(),
 	}
 	if resp.Response != nil {
@@ -263,6 +263,39 @@ func responseLoad(resp *Response) *Stat {
 	return stat
 }
 
+// multipartBodySummary 将 multipart/form-data 请求体表示为 "name=@filename" 或 "name=value"，不记录文件内容
+// multipartBodySummary represents multipart/form-data body as name=@filename or name=value, without recording file content
+func multipartBodySummary(buf *bytes.Buffer, contentType string) string {
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil || params["boundary"] == "" {
+		return ""
+	}
+	mr := multipart.NewReader(bytes.NewReader(buf.Bytes()), params["boundary"])
+	var parts []string
+	for {
+		p, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return ""
+		}
+		name := p.FormName()
+		if name == "" {
+			continue
+		}
+		if filename := p.FileName(); filename != "" {
+			parts = append(parts, name+"=@"+filename)
+		} else {
+			var sb strings.Builder
+			if _, err := io.Copy(&sb, p); err == nil {
+				parts = append(parts, name+"="+sb.String())
+			}
+		}
+	}
+	return strings.Join(parts, "&")
+}
+
 // serveLoad 从HTTP请求和响应中提取并构建统计信息（服务器端使用）
 // 该函数会记录服务器端的请求处理统计信息
 //
@@ -291,11 +324,20 @@ func serveLoad(w *ResponseWriter, r *http.Request, start time.Time, buf *bytes.B
 	stat.Request.URL = r.URL.String()
 
 	if buf != nil {
-		m := make(map[string]any)
-		if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
-			stat.Request.Body = buf.String()
+		contentType := r.Header.Get("Content-Type")
+		if strings.HasPrefix(contentType, "multipart/form-data") {
+			if summary := multipartBodySummary(buf, contentType); summary != "" {
+				stat.Request.Body = summary
+			} else {
+				stat.Request.Body = "(multipart)"
+			}
 		} else {
-			stat.Request.Body = m
+			m := make(map[string]any)
+			if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
+				stat.Request.Body = buf.String()
+			} else {
+				stat.Request.Body = m
+			}
 		}
 	}
 	scheme := "http://"

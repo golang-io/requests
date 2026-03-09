@@ -6,12 +6,191 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// TestMultipartBodySummary 测试 multipartBodySummary 函数
+func TestMultipartBodySummary(t *testing.T) {
+	// buildMultipart 辅助函数：构造 multipart body 和 Content-Type
+	buildMultipart := func(fields map[string]string, files map[string]string) (*bytes.Buffer, string) {
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+		for name, value := range fields {
+			_ = writer.WriteField(name, value)
+		}
+		for fieldName, fileName := range files {
+			part, _ := writer.CreateFormFile(fieldName, fileName)
+			_, _ = part.Write([]byte("fake file content"))
+		}
+		_ = writer.Close()
+		return &buf, writer.FormDataContentType()
+	}
+
+	tests := []struct {
+		name        string
+		buildInput  func() (*bytes.Buffer, string)
+		checkResult func(t *testing.T, result string)
+	}{
+		{
+			name: "单个文本字段",
+			buildInput: func() (*bytes.Buffer, string) {
+				return buildMultipart(map[string]string{"username": "alice"}, nil)
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "username=alice" {
+					t.Errorf("期望 'username=alice'，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "多个文本字段",
+			buildInput: func() (*bytes.Buffer, string) {
+				var buf bytes.Buffer
+				writer := multipart.NewWriter(&buf)
+				// 按顺序写入以保证顺序一致
+				_ = writer.WriteField("name", "bob")
+				_ = writer.WriteField("age", "30")
+				_ = writer.Close()
+				return &buf, writer.FormDataContentType()
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "name=bob&age=30" {
+					t.Errorf("期望 'name=bob&age=30'，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "单个文件上传",
+			buildInput: func() (*bytes.Buffer, string) {
+				return buildMultipart(nil, map[string]string{"avatar": "photo.png"})
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "avatar=@photo.png" {
+					t.Errorf("期望 'avatar=@photo.png'，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "混合字段和文件",
+			buildInput: func() (*bytes.Buffer, string) {
+				var buf bytes.Buffer
+				writer := multipart.NewWriter(&buf)
+				_ = writer.WriteField("title", "my doc")
+				part, _ := writer.CreateFormFile("file", "document.pdf")
+				_, _ = part.Write([]byte("pdf content"))
+				_ = writer.Close()
+				return &buf, writer.FormDataContentType()
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "title=my doc&file=@document.pdf" {
+					t.Errorf("期望 'title=my doc&file=@document.pdf'，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "无效的Content-Type",
+			buildInput: func() (*bytes.Buffer, string) {
+				return bytes.NewBufferString("some data"), "text/plain"
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "" {
+					t.Errorf("无效 Content-Type 应返回空字符串，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "无boundary的Content-Type",
+			buildInput: func() (*bytes.Buffer, string) {
+				return bytes.NewBufferString("some data"), "multipart/form-data"
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "" {
+					t.Errorf("无 boundary 应返回空字符串，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "无法解析的Content-Type",
+			buildInput: func() (*bytes.Buffer, string) {
+				return bytes.NewBufferString("data"), ";;;invalid;;;"
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "" {
+					t.Errorf("无法解析的 Content-Type 应返回空字符串，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "boundary不匹配的无效body",
+			buildInput: func() (*bytes.Buffer, string) {
+				return bytes.NewBufferString("not a valid multipart body"),
+					"multipart/form-data; boundary=nonexistent"
+			},
+			checkResult: func(t *testing.T, result string) {
+				// 没有有效的 part，应返回空字符串（parts 为空，Join 后为 ""）
+				if result != "" {
+					t.Errorf("无效 body 应返回空字符串，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "空的multipart body",
+			buildInput: func() (*bytes.Buffer, string) {
+				var buf bytes.Buffer
+				writer := multipart.NewWriter(&buf)
+				_ = writer.Close() // 关闭但不写入任何 part
+				return &buf, writer.FormDataContentType()
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "" {
+					t.Errorf("空 multipart body 应返回空字符串，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "多个文件上传",
+			buildInput: func() (*bytes.Buffer, string) {
+				var buf bytes.Buffer
+				writer := multipart.NewWriter(&buf)
+				part1, _ := writer.CreateFormFile("file1", "a.txt")
+				_, _ = part1.Write([]byte("aaa"))
+				part2, _ := writer.CreateFormFile("file2", "b.jpg")
+				_, _ = part2.Write([]byte("bbb"))
+				_ = writer.Close()
+				return &buf, writer.FormDataContentType()
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "file1=@a.txt&file2=@b.jpg" {
+					t.Errorf("期望 'file1=@a.txt&file2=@b.jpg'，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "字段值为空字符串",
+			buildInput: func() (*bytes.Buffer, string) {
+				return buildMultipart(map[string]string{"empty": ""}, nil)
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "empty=" {
+					t.Errorf("期望 'empty='，实际 '%s'", result)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf, contentType := tt.buildInput()
+			result := multipartBodySummary(buf, contentType)
+			tt.checkResult(t, result)
+		})
+	}
+}
 
 // TestStat_Methods 测试 Stat 的基础方法：String、Print、RequestBody、ResponseBody
 func TestStat_Methods(t *testing.T) {
@@ -378,6 +557,66 @@ func TestServeLoad(t *testing.T) {
 					t.Error("无效 JSON 应存储为字符串")
 				} else if bodyStr != "invalid json" {
 					t.Errorf("请求体不匹配，期望 'invalid json'，实际 '%s'", bodyStr)
+				}
+			},
+		},
+		{
+			name: "multipart/form-data请求_summary成功",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				// 构造有效的 multipart body
+				var body bytes.Buffer
+				writer := multipart.NewWriter(&body)
+				_ = writer.WriteField("username", "alice")
+				part, _ := writer.CreateFormFile("avatar", "photo.png")
+				_, _ = part.Write([]byte("fake image data"))
+				_ = writer.Close()
+
+				contentType := writer.FormDataContentType()
+				req, _ := http.NewRequest("POST", "/upload", nil)
+				req.Header.Set("Content-Type", contentType)
+				req.RemoteAddr = "10.0.0.1:9090"
+				w := &ResponseWriter{
+					StatusCode: 200,
+					Content:    bytes.NewBufferString(`{"ok":true}`),
+				}
+				buf := bytes.NewBuffer(body.Bytes())
+				return req, w, buf
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				bodyStr, ok := stat.Request.Body.(string)
+				if !ok {
+					t.Fatalf("multipart 请求体应为字符串，实际类型 %T", stat.Request.Body)
+				}
+				if !strings.Contains(bodyStr, "username=alice") {
+					t.Errorf("应包含 'username=alice'，实际 '%s'", bodyStr)
+				}
+				if !strings.Contains(bodyStr, "avatar=@photo.png") {
+					t.Errorf("应包含 'avatar=@photo.png'，实际 '%s'", bodyStr)
+				}
+			},
+		},
+		{
+			name: "multipart/form-data请求_summary失败回退",
+			buildReq: func() (*http.Request, *ResponseWriter, *bytes.Buffer) {
+				// 构造 Content-Type 是 multipart/form-data 但 body 内容无效的情况
+				contentType := "multipart/form-data; boundary=invalidboundary"
+				req, _ := http.NewRequest("POST", "/upload", nil)
+				req.Header.Set("Content-Type", contentType)
+				req.RemoteAddr = "10.0.0.1:9090"
+				w := &ResponseWriter{
+					StatusCode: 400,
+					Content:    bytes.NewBufferString("bad request"),
+				}
+				buf := bytes.NewBufferString("this is not valid multipart data")
+				return req, w, buf
+			},
+			checkFunc: func(t *testing.T, stat *Stat) {
+				bodyStr, ok := stat.Request.Body.(string)
+				if !ok {
+					t.Fatalf("无效 multipart 请求体应为字符串，实际类型 %T", stat.Request.Body)
+				}
+				if bodyStr != "(multipart)" {
+					t.Errorf("期望 '(multipart)'，实际 '%s'", bodyStr)
 				}
 			},
 		},
