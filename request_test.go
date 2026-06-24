@@ -193,3 +193,28 @@ func TestNewRequestWithContext(t *testing.T) {
 		})
 	}
 }
+
+// TestNewRequestWithContext_NilHeader 验证 Options.Header 为 nil 时不会覆盖掉
+// http.NewRequestWithContext 初始化的非 nil Header，从而保证后续 AddCookie 不 panic。
+// （用户绕过 newOptions 直接构造 Options 时 Header 可能为 nil）
+func TestNewRequestWithContext_NilHeader(t *testing.T) {
+	// 直接构造 Options，Header 故意保持 nil，并带上 Cookie 触发 r.AddCookie
+	options := Options{
+		Method:  "GET",
+		URL:     "http://example.com",
+		Header:  nil,
+		Cookies: []http.Cookie{{Name: "session", Value: "123"}},
+	}
+
+	req, err := NewRequestWithContext(context.Background(), options)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext() 错误 = %v", err)
+	}
+	if req.Header == nil {
+		t.Fatal("Header 不应为 nil，应保留 http.NewRequestWithContext 初始化的非 nil Header")
+	}
+	cookies := req.Cookies()
+	if len(cookies) != 1 || cookies[0].Name != "session" || cookies[0].Value != "123" {
+		t.Errorf("Cookie 设置不正确: %+v", cookies)
+	}
+}

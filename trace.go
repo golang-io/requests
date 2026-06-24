@@ -310,7 +310,7 @@ func traceLv(used bool, mLimit ...int) func(http.RoundTripper) http.RoundTripper
 			// Non-streaming response: normally copy and print response body
 			buf, r, err := CopyBody(resp.Body)
 			if err != nil {
-				Log("! response error: %w", err)
+				Log("! response error: %v", err)
 				return nil, err
 			}
 			resp.Body = r

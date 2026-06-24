@@ -54,9 +54,10 @@ type Options struct {
 	Cookies  []http.Cookie // HTTP Cookies
 
 	// ===== 客户端配置 / Client Configuration =====
-	Timeout  time.Duration // 请求超时时间 / Request timeout
-	MaxConns int           // 最大连接数（连接池大小）/ Maximum connections (connection pool size)
-	Verify   bool          // 是否验证TLS证书 / Whether to verify TLS certificates
+	Timeout     time.Duration // 请求超时时间（整个请求的总超时）/ Request timeout (total timeout for the whole request)
+	ConnTimeout time.Duration // TCP 连接建立超时（拨号超时）/ TCP connection establishment timeout (dial timeout)
+	MaxConns    int           // 最大连接数（连接池大小）/ Maximum connections (connection pool size)
+	Verify      bool          // 是否验证TLS证书 / Whether to verify TLS certificates
 
 	// ===== 传输层配置 / Transport Layer Configuration =====
 	Transport        http.RoundTripper                           // 自定义传输层 / Custom transport
@@ -114,12 +115,13 @@ type Option func(*Options)
 //   - Options: 合并后的配置选项 / Merged configuration options
 func newOptions(opts []Option, extends ...Option) Options {
 	opt := Options{
-		URL:      "http://127.0.0.1:80",
-		RawQuery: make(url.Values),
-		Header:   make(http.Header),
-		Timeout:  30 * time.Second,
-		MaxConns: 100,
-		Proxy:    http.ProxyFromEnvironment,
+		URL:         "http://127.0.0.1:80",
+		RawQuery:    make(url.Values),
+		Header:      make(http.Header),
+		Timeout:     30 * time.Second,
+		ConnTimeout: 10 * time.Second,
+		MaxConns:    100,
+		Proxy:       http.ProxyFromEnvironment,
 
 		OnStart:    func(s *http.Server) { log.Printf("http(s) serve %s", s.Addr) },
 		OnShutdown: func(s *http.Server) { log.Printf("http shutdown") },
@@ -228,6 +230,12 @@ func Method(method string) Option {
 //	    requests.Body("data"),
 //	)
 //
+// ⚠️ Unix Socket 限制 / Unix Socket Limitation:
+//   - Unix socket 路径只能在「会话级」（requests.New）设置，因为 Transport 在创建会话时即固化拨号逻辑。
+//   - 在「请求级」传入 unix:// 不会改变已建好的 Transport，不会生效；如需切换 socket 请新建 Session。
+//   - The Unix socket path can only be set at the "session level" (requests.New), because the Transport
+//     fixes its dial logic when the session is created. Passing unix:// at the "request level" does NOT
+//     take effect; create a new Session to switch sockets.
 // 参数 / Parameters:
 //   - url: 目标 URL 地址 / Target URL address
 //
@@ -360,6 +368,10 @@ func Body(body any) Option {
 // 使用场景 / Use Cases:
 //   - 发送大量数据时，减少网络传输量 / Reduce network transmission when sending large data
 //   - 服务器支持 gzip 解压时 / When server supports gzip decompression
+//
+// 错误处理 / Error Handling:
+//   - 压缩出错不再 panic，也不中断请求：仅记录日志，跳过压缩（不设置 body 与编码头）
+//   - Compression errors no longer panic nor abort the request: just logged, compression is skipped (body and encoding headers left unset)
 //
 // 示例 / Example:
 //
@@ -545,6 +557,33 @@ func BasicAuth(username, password string) Option {
 func Timeout(timeout time.Duration) Option {
 	return func(o *Options) {
 		o.Timeout = timeout
+	}
+}
+
+// ConnTimeout 设置 TCP 连接建立（拨号）超时时间
+// ConnTimeout sets the TCP connection establishment (dial) timeout duration
+//
+// 参数 / Parameters:
+//   - timeout: 拨号超时时间 / Dial timeout duration
+//
+// 说明 / Notes:
+//   - 仅控制建立连接（TCP 握手 + DNS 解析）阶段的超时
+//   - Only controls the timeout for the connection establishment phase (TCP handshake + DNS)
+//   - 与 Timeout 不同：Timeout 控制整个请求的总耗时，ConnTimeout 仅控制拨号
+//   - Differs from Timeout: Timeout controls the total request duration, ConnTimeout only the dial phase
+//   - 默认值为 10 秒 / Default is 10 seconds
+//   - 仅在会话级（New）配置生效，因 Transport 在创建时固化拨号逻辑
+//   - Only effective at session level (New), since the Transport fixes dial logic at creation time
+//
+// 示例 / Example:
+//
+//	sess := requests.New(
+//	    requests.URL("https://api.example.com"),
+//	    requests.ConnTimeout(3*time.Second), // 3秒拨号超时 / 3s dial timeout
+//	)
+func ConnTimeout(timeout time.Duration) Option {
+	return func(o *Options) {
+		o.ConnTimeout = timeout
 	}
 }
 

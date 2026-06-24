@@ -5,7 +5,6 @@ package requests
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -132,9 +131,9 @@ func LogS(ctx context.Context, stat *Stat) {
 		_, _ = fmt.Printf("%s\n", stat)
 		return
 	}
-	if b, err := json.Marshal(stat.Request.Body); err != nil {
-		log.Printf(`%s # body=%v, resp="%v", err=%v`, stat.Print(), stat.Request.Body, stat.Response.Body, err)
-	} else {
-		log.Printf(`%s # body=%s, resp="%v"`, stat.Print(), b, stat.Response.Body)
+	resp := a2s(stat.Response.Body)
+	if len(resp) > 1024 {
+		resp = resp[:1024] + "..."
 	}
+	log.Printf(`%s # body=%s, resp=%s`, stat.Print(), a2s(stat.Request.Body), resp)
 }

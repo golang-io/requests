@@ -104,6 +104,17 @@ func newTransport(opts ...Option) *http.Transport {
 
 		// DialContext 自定义连接创建逻辑 / DialContext customizes connection creation logic
 		// 支持 Unix domain sockets 和 TCP 连接 / Supports Unix domain sockets and TCP connections
+		//
+		// ⚠️ 设计限制 / Design limitation:
+		//   - 此处 options.URL 在 New()/newTransport() 时即被捕获并固化，仅反映「会话级」配置。
+		//     因此 Unix socket 必须在会话级设置：requests.New(requests.URL("unix:///path.sock"))。
+		//   - 请求级再传 requests.URL("unix://...") 不会改变已建好的 Transport 的拨号逻辑，不生效。
+		//     若需切换到不同的 Unix socket，请新建一个 Session。
+		//   - The options.URL here is captured/fixed at New()/newTransport() time and reflects only the
+		//     "session-level" config. So a Unix socket MUST be set at session level:
+		//     requests.New(requests.URL("unix:///path.sock")). Passing requests.URL("unix://...") at
+		//     request level does NOT change the already-built Transport's dial logic. Create a new
+		//     Session to switch to a different Unix socket.
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			// 处理 Unix domain socket 连接 / Handle Unix domain socket connections
 			if strings.HasPrefix(options.URL, "unix://") {
@@ -115,7 +126,7 @@ func newTransport(opts ...Option) *http.Transport {
 				network, addr = u.Scheme, u.Path
 			}
 			// 创建连接 / Create connection
-			return socket(ctx, options.LocalAddr, network, addr, 10*time.Second)
+			return socket(ctx, options.LocalAddr, network, addr, options.ConnTimeout)
 		},
 
 		// 连接池配置 / Connection pool configuration
