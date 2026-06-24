@@ -191,6 +191,14 @@ func streamRead(ctx context.Context, reader io.Reader, fn func(int64, []byte) er
 			return cnt, err1
 		}
 
+		// EOF 且本次未读到任何剩余数据：流已读完，直接结束
+		// 避免当流以 '\n' 结尾（或为空流）时，用空内容多触发一次回调
+		// EOF with no remaining bytes: stream is fully consumed, return directly,
+		// avoiding a spurious empty-content callback when the stream ends with '\n' (or is empty)
+		if err1 == io.EOF && len(raw) == 0 {
+			return cnt, nil
+		}
+
 		// 累计行号和字节数
 		// Accumulate line number and byte count
 		i, cnt = i+1, cnt+int64(len(raw))

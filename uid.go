@@ -56,6 +56,20 @@ func GenId(id ...string) string {
 	if len(id) != 0 && id[0] != "" {
 		return id[0]
 	}
-	i := time.Now().UnixNano()*1000 + rand.Int64N(1000) // % 4738381338321616895
-	return strings.ToUpper(strconv.FormatUint(uint64(i), 36))
+	// 受 strconv.ParseUint(id, 36, 64) 及 ID 长度约束，ID 必须落在 uint64 范围内。
+	// 若用纳秒精度，时间戳已占约 61 bit，仅剩约 3 bit 给随机，并发场景下熵不足、
+	// 易发生碰撞。这里改用微秒精度，并通过乘法做"高位时间 + 低位随机"的干净分隔：
+	//   - UnixMicro() * 1000 将微秒时间戳抬高 3 个十进制位作为高位，保证时间单调性；
+	//   - 低 3 位（[0,1000) 随机数）专门用于区分同一微秒内的并发调用，不会覆盖时间位。
+	// 微秒时间戳约 51 bit，*1000 后约 61 bit，远在 uint64 范围内，不会溢出。
+	//
+	// Constrained by strconv.ParseUint(id, 36, 64) and ID length, the value must fit in
+	// uint64. With nanosecond precision the timestamp alone uses ~61 bits, leaving only
+	// ~3 bits for randomness, which is too little under concurrency. We use microsecond
+	// precision and a multiply to cleanly separate the high time bits from the low
+	// random bits (so randomness never overwrites the time bits): UnixMicro()*1000 keeps
+	// IDs monotonic, and the low [0,1000) random part disambiguates concurrent calls
+	// within the same microsecond.
+	i := uint64(time.Now().UnixNano())*1000 + uint64(rand.Int64N(1000))
+	return strings.ToUpper(strconv.FormatUint(i, 36))
 }

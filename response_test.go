@@ -95,6 +95,38 @@ func TestStreamRead(t *testing.T) {
 	}
 }
 
+// TestStreamRead_NoTrailingEmptyCallback 验证流以 '\n' 结尾或为空流时，
+// 不会用空内容多触发一次回调（#12）。
+func TestStreamRead_NoTrailingEmptyCallback(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantCalls int
+	}{
+		{"以换行结尾-单行", "hello\n", 1},
+		{"以换行结尾-多行", "hello\nworld\n", 2},
+		{"不以换行结尾", "hello", 1},
+		{"空流", "", 0},
+		{"仅一个换行", "\n", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			_, err := streamRead(context.Background(), strings.NewReader(tt.input), func(_ int64, _ []byte) error {
+				calls++
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("streamRead() 意外错误: %v", err)
+			}
+			if calls != tt.wantCalls {
+				t.Errorf("回调次数 = %d, 期望 %d", calls, tt.wantCalls)
+			}
+		})
+	}
+}
+
 // TestStreamReadError 测试streamRead函数的错误处理
 func TestStreamReadError(t *testing.T) {
 	// 测试回调函数返回错误的情况

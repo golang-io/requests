@@ -249,8 +249,11 @@ func TestA2S(t *testing.T) {
 		input    any
 		expected string
 	}{
-		{"nil", nil, "null"},
-		{"string", "hello", `"hello"`},
+		// a2s 对 nil/string/[]byte 做特殊处理（面向日志可读性）：
+		// nil 返回空串、string/[]byte 原样返回（不加 JSON 引号）；其余类型走 json.Marshal。
+		{"nil", nil, ""},
+		{"string", "hello", "hello"},
+		{"bytes", []byte("world"), "world"},
 		{"number", 42, "42"},
 		{"boolean", true, "true"},
 		{"map", map[string]any{"key": "value"}, `{"key":"value"}`},
@@ -770,9 +773,9 @@ func TestServeLoad_TLS(t *testing.T) {
 				t.Error("Cost 应该大于等于 0")
 			}
 
-			if stat.StartAt != start.Format("2006-01-02 15:04:05.000") {
+			if stat.StartAt != start.Format(time.RFC3339) {
 				t.Errorf("StartAt 格式不正确，期望 %s，实际 %s",
-					start.Format("2006-01-02 15:04:05.000"), stat.StartAt)
+					start.Format(time.RFC3339), stat.StartAt)
 			}
 		})
 	}

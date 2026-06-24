@@ -126,7 +126,14 @@ func NewRequestWithContext(ctx context.Context, options Options) (*http.Request,
 
 	// 设置请求头
 	// Set headers
-	r.Header = options.Header
+	// 仅在 options.Header 非 nil 时覆盖，否则保留 http.NewRequestWithContext 已初始化的非 nil Header，
+	// 避免后续 r.AddCookie 等操作在 nil map 上 panic（用户绕过 newOptions 直接构造 Options 时可能为 nil）
+	// Only overwrite when options.Header is non-nil; otherwise keep the non-nil Header initialized by
+	// http.NewRequestWithContext, to avoid panics in subsequent r.AddCookie on a nil map (possible when
+	// users construct Options directly, bypassing newOptions)
+	if options.Header != nil {
+		r.Header = options.Header
+	}
 
 	// 添加Cookie
 	// Add cookies

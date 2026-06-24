@@ -49,8 +49,8 @@ type Stat struct {
 	// RequestId is the unique identifier for request tracking and correlation
 	RequestId string `json:"RequestId"`
 
-	// StartAt 请求开始时间，格式为 "2006-01-02 15:04:05.000"
-	// StartAt is the request start time in format "2006-01-02 15:04:05.000"
+	// StartAt 请求开始时间，采用 RFC3339 格式（如 "2006-01-02T15:04:05Z07:00"）
+	// StartAt is the request start time in RFC3339 format (e.g. "2006-01-02T15:04:05Z07:00")
 	StartAt string `json:"StartAt"`
 
 	// Cost 请求总耗时，单位：毫秒
@@ -78,9 +78,9 @@ type Stat struct {
 		// Method is the HTTP request method (GET, POST, PUT, DELETE, etc.)
 		Method string `json:"Method"`
 
-		// Header 请求头信息（简化版，每个key只保留第一个value）
-		// Header is the request headers (simplified, only first value per key)
-		Header map[string]string `json:"Header"`
+		// Header 请求头信息（完整保留同名多值）
+		// Header is the request headers (preserves multiple values per key)
+		Header http.Header `json:"Header"`
 
 		// Body 请求体内容（可能是字符串或JSON对象）
 		// Body is the request body content (may be string or JSON object)
@@ -96,9 +96,9 @@ type Stat struct {
 		// For client requests, this field is unused
 		URL string `json:"URL"`
 
-		// Header 响应头信息（简化版，每个key只保留第一个value）
-		// Header is the response headers (simplified, only first value per key)
-		Header map[string]string `json:"Header"`
+		// Header 响应头信息（完整保留同名多值）
+		// Header is the response headers (preserves multiple values per key)
+		Header http.Header `json:"Header"`
 
 		// Body 响应体内容（可能是字符串或JSON对象）
 		// Body is the response body content (may be string or JSON object)
@@ -214,10 +214,7 @@ func responseLoad(resp *Response) *Stat {
 			stat.Response.Body = resp.Content.String()
 		}
 
-		stat.Response.Header = make(map[string]string)
-		for k, v := range resp.Response.Header {
-			stat.Response.Header[k] = v[0]
-		}
+		stat.Response.Header = resp.Response.Header.Clone()
 		stat.Response.ContentLength = resp.Response.ContentLength
 		if stat.Response.ContentLength == -1 && resp.Content.Len() != 0 {
 			stat.Response.ContentLength = int64(resp.Content.Len())
@@ -250,11 +247,7 @@ func responseLoad(resp *Response) *Stat {
 			}
 		}
 
-		stat.Request.Header = make(map[string]string)
-
-		for k, v := range resp.Request.Header {
-			stat.Request.Header[k] = v[0]
-		}
+		stat.Request.Header = resp.Request.Header.Clone()
 	}
 
 	if resp.Err != nil {
@@ -312,15 +305,12 @@ func multipartBodySummary(buf *bytes.Buffer, contentType string) string {
 //   - *Stat: 统计信息对象 / Statistics object
 func serveLoad(w *ResponseWriter, r *http.Request, start time.Time, buf *bytes.Buffer) *Stat {
 	stat := &Stat{
-		StartAt: start.Format("2006-01-02 15:04:05.000"),
+		StartAt: start.Format(time.RFC3339),
 		Cost:    time.Since(start).Milliseconds(),
 	}
 	stat.Request.RemoteAddr = r.RemoteAddr
 	stat.Request.Method = r.Method
-	stat.Request.Header = make(map[string]string)
-	for k, v := range r.Header {
-		stat.Request.Header[k] = v[0]
-	}
+	stat.Request.Header = r.Header.Clone()
 	stat.Request.URL = r.URL.String()
 
 	if buf != nil {
@@ -347,26 +337,38 @@ func serveLoad(w *ResponseWriter, r *http.Request, start time.Time, buf *bytes.B
 	stat.Response.URL = scheme + r.Host
 	stat.Response.StatusCode = w.StatusCode
 	stat.Response.ContentLength = int64(w.Content.Len())
-	stat.Response.Header = make(map[string]string)
-	for k, v := range r.Header {
-		stat.Response.Header[k] = v[0]
+	stat.Response.Header = make(http.Header)
+	if w.ResponseWriter != nil {
+		stat.Response.Header = w.Header().Clone()
 	}
 	stat.Response.Body = w.Content.String()
 	return stat
 }
 
-// a2s (any to string) 将任意类型的值转换为JSON字符串
-// 如果JSON序列化失败，则使用fmt.Sprintf格式化输出
+// a2s (any to string) 将任意类型的值转换为字符串，主要用于日志/统计的可读输出
+// a2s (any to string) converts any value to a string, mainly for readable log/stat output
 //
-// a2s (any to string) converts any type value to JSON string
-// If JSON serialization fails, use fmt.Sprintf for formatted output
+// 转换规则 / Conversion rules:
+//   - nil：返回空串 ""（而非 "null"），便于日志中空 body 显示为空 / nil: returns "" (not "null"), so empty bodies render blank in logs
+//   - string / []byte：原样返回，不加 JSON 引号，保证日志可读 / string/[]byte: returned as-is without JSON quotes for readability
+//   - 其他类型：使用 json.Marshal 序列化 / other types: serialized via json.Marshal
+//   - json.Marshal 失败时（如 chan、func）：回退到 fmt.Sprintf("%v", v) / on json.Marshal failure (e.g. chan, func): falls back to fmt.Sprintf("%v", v)
 //
 // 参数 / Parameters:
 //   - v: any - 需要转换的值 / Value to convert
 //
 // 返回值 / Returns:
-//   - string: JSON字符串或格式化字符串 / JSON string or formatted string
+//   - string: 转换后的字符串 / Converted string
 func a2s(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case []byte:
+		return string(t)
+	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Sprintf("%v", v)
