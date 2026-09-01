@@ -120,9 +120,23 @@ func NewRequestWithContext(ctx context.Context, options Options) (*http.Request,
 		r.URL.Path += p
 	}
 
-	// 设置查询参数
-	// Set query parameters
-	r.URL.RawQuery = options.RawQuery.Encode()
+	// 设置查询参数：与 URL 中已有的查询参数合并，而不是无条件覆盖。
+	// 这样传入完整 URL（如 "http://host/p?a=1"）时，其自带的 query 不会被静默丢弃；
+	// options.RawQuery 为空时完全保留原始查询串（含原有编码与顺序），非空时按
+	// Params/Param 的"追加"语义合并，同名参数保留双方全部取值。
+	// Merge query parameters with those already present in the URL instead of overwriting them
+	// unconditionally, so a full URL such as "http://host/p?a=1" does not silently lose its query.
+	// When options.RawQuery is empty the original raw query is kept as is; otherwise values are
+	// merged following the additive semantics of Params/Param.
+	if len(options.RawQuery) > 0 {
+		query := r.URL.Query()
+		for k, values := range options.RawQuery {
+			for _, v := range values {
+				query.Add(k, v)
+			}
+		}
+		r.URL.RawQuery = query.Encode()
+	}
 
 	// 设置请求头
 	// Set headers
