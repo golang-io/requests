@@ -142,6 +142,23 @@ func TestNewRequestWithContext(t *testing.T) {
 			},
 		},
 		{
+			// URL 自带查询参数且未使用 Param/Params 时，原始查询串应原样保留
+			name: "URL自带查询参数",
+			opts: []Option{MethodGet, URL("http://example.com/api?b=2&a=1")},
+			want: func(r *http.Request) bool {
+				return r.URL.RawQuery == "b=2&a=1"
+			},
+		},
+		{
+			// URL 自带查询参数与 Param 同时存在时应合并，同名参数保留双方取值
+			name: "URL查询参数与Param合并",
+			opts: []Option{MethodGet, URL("http://example.com/api?a=1"), Param("b", "2"), Param("a", "3")},
+			want: func(r *http.Request) bool {
+				q := r.URL.Query()
+				return len(q["a"]) == 2 && q["a"][0] == "1" && q["a"][1] == "3" && q.Get("b") == "2"
+			},
+		},
+		{
 			name: "带请求头",
 			opts: []Option{MethodGet, URL("http://example.com"), Header("X-Test", "test-value")},
 			want: func(r *http.Request) bool {
