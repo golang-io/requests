@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"net/url"
 	"strings"
 	"testing"
@@ -1263,4 +1265,19 @@ func TestTrace_StreamingResponseWithRealStream(t *testing.T) {
 	}
 
 	t.Logf("流式响应体内容: %s", bodyStr)
+}
+
+// TestTrace_DNSDoneWithAddrs 覆盖 DNSDone 中遍历 Addrs 的分支
+// TestTrace_DNSDoneWithAddrs covers the Addrs loop in DNSDone
+func TestTrace_DNSDoneWithAddrs(t *testing.T) {
+	if trace.DNSDone == nil {
+		t.Fatal("trace.DNSDone 未初始化")
+	}
+	trace.DNSDone(httptrace.DNSDoneInfo{
+		Addrs: []net.IPAddr{
+			{IP: net.IPv4(1, 2, 3, 4)},
+			{IP: net.ParseIP("2001:db8::1")},
+		},
+		Coalesced: true,
+	})
 }

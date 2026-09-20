@@ -56,20 +56,18 @@ func GenId(id ...string) string {
 	if len(id) != 0 && id[0] != "" {
 		return id[0]
 	}
-	// 受 strconv.ParseUint(id, 36, 64) 及 ID 长度约束，ID 必须落在 uint64 范围内。
-	// 若用纳秒精度，时间戳已占约 61 bit，仅剩约 3 bit 给随机，并发场景下熵不足、
-	// 易发生碰撞。这里改用微秒精度，并通过乘法做"高位时间 + 低位随机"的干净分隔：
-	//   - UnixMicro() * 1000 将微秒时间戳抬高 3 个十进制位作为高位，保证时间单调性；
-	//   - 低 3 位（[0,1000) 随机数）专门用于区分同一微秒内的并发调用，不会覆盖时间位。
-	// 微秒时间戳约 51 bit，*1000 后约 61 bit，远在 uint64 范围内，不会溢出。
+	// 当前实现：UnixNano()*1000 + [0,1000) 随机数，再 FormatUint(..., 36)。
+	// 说明与局限：
+	//   - 目标是落在 uint64 内，便于 strconv.ParseUint(id, 36, 64)；
+	//   - 纳秒时间戳约 61 bit，再 *1000 会溢出 uint64，高位时间信息被截断；
+	//   - 低位随机是「抽槽」而非原子占槽，同刻并发下生日悖论易碰撞，不保证唯一。
 	//
-	// Constrained by strconv.ParseUint(id, 36, 64) and ID length, the value must fit in
-	// uint64. With nanosecond precision the timestamp alone uses ~61 bits, leaving only
-	// ~3 bits for randomness, which is too little under concurrency. We use microsecond
-	// precision and a multiply to cleanly separate the high time bits from the low
-	// random bits (so randomness never overwrites the time bits): UnixMicro()*1000 keeps
-	// IDs monotonic, and the low [0,1000) random part disambiguates concurrent calls
-	// within the same microsecond.
+	// Current implementation: UnixNano()*1000 + random in [0,1000), then FormatUint base 36.
+	// Notes / limits:
+	//   - Intended to stay in uint64 for strconv.ParseUint(id, 36, 64);
+	//   - ~61-bit nanosecond timestamp *1000 overflows uint64 and truncates high time bits;
+	//   - Random picks a slot; it does not reserve one, so concurrent calls can collide
+	//     (birthday paradox). Uniqueness is not guaranteed.
 	i := uint64(time.Now().UnixNano())*1000 + uint64(rand.Int64N(1000))
 	return strings.ToUpper(strconv.FormatUint(i, 36))
 }

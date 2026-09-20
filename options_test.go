@@ -178,6 +178,16 @@ func TestTimeoutOption(t *testing.T) {
 	}
 }
 
+func TestConnTimeoutOption(t *testing.T) {
+	timeout := 3 * time.Second
+	opts := newOptions([]Option{
+		ConnTimeout(timeout),
+	})
+	if opts.ConnTimeout != timeout {
+		t.Errorf("ConnTimeout = %v, 期望 %v", opts.ConnTimeout, timeout)
+	}
+}
+
 func TestStreamOption(t *testing.T) {
 	// 声明一个用于测试的布尔变量
 	streamFn := func(i int64, b []byte) error {

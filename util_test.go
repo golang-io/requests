@@ -140,6 +140,20 @@ func TestLogS(t *testing.T) {
 
 	// 确保不会崩溃
 	LogS(context.Background(), badStat)
+
+	// Response.URL 非空且 body 超长 → 截断分支
+	longStat := &Stat{
+		RequestId: "long-body",
+		StartAt:   "2023-05-01 12:00:00.000",
+		Cost:      10,
+	}
+	longStat.Request.Method = "GET"
+	longStat.Request.URL = "http://example.com/long"
+	longStat.Request.Body = "req"
+	longStat.Response.URL = "http://example.com/long"
+	longStat.Response.StatusCode = 200
+	longStat.Response.Body = strings.Repeat("x", 2048)
+	LogS(context.Background(), longStat)
 }
 
 // 测试 ParseBody 处理读取错误的情况

@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"sync"
 	"testing"
@@ -178,6 +179,28 @@ func TestMultipartBodySummary(t *testing.T) {
 			checkResult: func(t *testing.T, result string) {
 				if result != "empty=" {
 					t.Errorf("期望 'empty='，实际 '%s'", result)
+				}
+			},
+		},
+		{
+			name: "无name的part被跳过",
+			buildInput: func() (*bytes.Buffer, string) {
+				var buf bytes.Buffer
+				writer := multipart.NewWriter(&buf)
+				h := make(textproto.MIMEHeader)
+				h.Set("Content-Disposition", `form-data; filename="anon.txt"`)
+				part, err := writer.CreatePart(h)
+				if err != nil {
+					panic(err)
+				}
+				_, _ = part.Write([]byte("x"))
+				_ = writer.WriteField("ok", "1")
+				_ = writer.Close()
+				return &buf, writer.FormDataContentType()
+			},
+			checkResult: func(t *testing.T, result string) {
+				if result != "ok=1" {
+					t.Errorf("期望仅保留有 name 的字段 'ok=1'，实际 '%s'", result)
 				}
 			},
 		},
