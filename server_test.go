@@ -405,7 +405,7 @@ var f = func(w http.ResponseWriter, r *http.Request) {
 // TestNode_Operations 测试 Node 的基本操作（Add、Print等）
 // TestNode_Operations tests basic Node operations (Add, Print, etc.)
 func TestNode_Operations(t *testing.T) {
-	r := NewNode("/", nil)
+	r := NewNode("/")
 	r.Add("/abc/def/ghi", f)
 	r.Add("/abc/def/xyz", f)
 	r.Add("/1/2/3", f)
@@ -459,6 +459,10 @@ func Test_isParam(t *testing.T) {
 		{"普通路径段", "users", false, ""},
 		{"普通路径段-数字", "123", false, ""},
 		{"普通路径段-混合", "api-v1", false, ""},
+
+		// 多段通配应由 isMultiParam 识别，isParam 必须返回 false
+		{":name...排除", ":path...", false, ""},
+		{"{name...}排除", "{path...}", false, ""},
 	}
 
 	for _, tt := range tests {
@@ -471,6 +475,48 @@ func Test_isParam(t *testing.T) {
 				t.Errorf("isParam(%q) 参数名 = %q, 期望 %q", tt.segment, gotName, tt.wantName)
 			}
 		})
+	}
+}
+
+// Test_isMultiParam 测试多段通配解析与非法名
+// Test_isMultiParam tests multi-wildcard parsing and invalid names
+func Test_isMultiParam(t *testing.T) {
+	tests := []struct {
+		segment   string
+		wantParam bool
+		wantName  string
+	}{
+		{"{path...}", true, "path"},
+		{":path...", true, "path"},
+		{"{path}", false, ""},
+		{":path", false, ""},
+		{"users", false, ""},
+		{"{...}", false, ""}, // 空名 → validParamName("")
+		{":...", false, ""},  // 空名
+		{"{bad-name...}", false, ""},
+		{":bad-name...", false, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.segment, func(t *testing.T) {
+			ok, name := isMultiParam(tt.segment)
+			if ok != tt.wantParam || name != tt.wantName {
+				t.Errorf("isMultiParam(%q)=(%v,%q), want (%v,%q)", tt.segment, ok, name, tt.wantParam, tt.wantName)
+			}
+		})
+	}
+}
+
+// Test_validParamName 直接覆盖空名分支
+// Test_validParamName covers the empty-name branch directly
+func Test_validParamName(t *testing.T) {
+	if validParamName("") {
+		t.Fatal("empty name should be invalid")
+	}
+	if !validParamName("a_1") {
+		t.Fatal("a_1 should be valid")
+	}
+	if validParamName("a-b") {
+		t.Fatal("a-b should be invalid")
 	}
 }
 
@@ -528,18 +574,20 @@ func TestNode_EmptyPath(t *testing.T) {
 		}
 	}()
 
-	node := NewNode("/", nil)
+	node := NewNode("/")
 	node.Add("", nil)
 }
 
 // TestNode_RootPath 测试根路径处理
 func TestNode_RootPath(t *testing.T) {
-	node := NewNode("/", nil)
+	node := NewNode("/")
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	node.Add("/", handler)
 
-	if node.methods[""] == nil {
-		t.Error("根路径处理器未正确设置")
+	// "/" 挂在 multi 子节点上（对齐 net/http 匿名 "..."）
+	// "/" is stored on the multi child (aligned with net/http anonymous "...")
+	if node.multi == nil || node.multi.methods[""] == nil {
+		t.Error("根路径处理器未正确设置到 multi")
 	}
 }
 
@@ -558,15 +606,20 @@ func TestServeMux_RedirectAndPprof(t *testing.T) {
 		}
 	})
 
-	// 测试 pprof 路由
+	// 测试 pprof 路由（不含 profile/trace：二者默认会阻塞采样数秒）
+	// Test pprof routes (skip profile/trace: they block for sampling by default)
 	t.Run("Pprof路由", func(t *testing.T) {
 		mux.Pprof()
 		paths := []string{
 			"/debug/pprof/",
 			"/debug/pprof/cmdline",
-			"/debug/pprof/profile",
 			"/debug/pprof/symbol",
-			"/debug/pprof/trace",
+			"/debug/pprof/heap",
+			"/debug/pprof/goroutine",
+			"/debug/pprof/allocs",
+			"/debug/pprof/block",
+			"/debug/pprof/mutex",
+			"/debug/pprof/threadcreate",
 		}
 
 		for _, path := range paths {
@@ -577,6 +630,187 @@ func TestServeMux_RedirectAndPprof(t *testing.T) {
 				t.Errorf("Pprof 路径 %s 未正确注册", path)
 			}
 		}
+	})
+}
+
+// TestServeMux_MultiWildcard 测试尾斜杠 multi 通配（对齐 net/http multi）
+// TestServeMux_MultiWildcard tests trailing-slash multi wildcard (aligned with net/http multi)
+func TestServeMux_MultiWildcard(t *testing.T) {
+	t.Run("multi匹配更长路径", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/debug/pprof/", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "path=%s", r.URL.Path)
+		})
+
+		rec, _ := makeRequest(mux, "GET", "/debug/pprof/heap")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "path=/debug/pprof/heap")
+	})
+
+	t.Run("无尾斜杠访问子树根则307", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/debug/pprof/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("index"))
+		})
+
+		rec, _ := makeRequest(mux, "GET", "/debug/pprof")
+		assertStatusCode(t, rec, http.StatusTemporaryRedirect)
+		if loc := rec.Header().Get("Location"); loc != "/debug/pprof/" {
+			t.Errorf("期望 Location=/debug/pprof/，得到 %q", loc)
+		}
+	})
+
+	t.Run("精确路径覆盖则不307", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/debug/pprof/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("index"))
+		})
+		mux.Route("/debug/pprof", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("exact"))
+		})
+
+		rec, _ := makeRequest(mux, "GET", "/debug/pprof")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "exact")
+	})
+
+	t.Run("命名multi写入PathValue且不改URL.Path", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/files/{path...}", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "path=%s value=%s", r.URL.Path, r.PathValue("path"))
+		})
+
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/files/a/b.txt", nil)
+		mux.ServeHTTP(rec, req)
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "path=/files/a/b.txt value=a/b.txt")
+		assertPathValue(t, req, "path", "a/b.txt")
+	})
+
+	t.Run("冒号命名multi", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/assets/:path...", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "%s", r.PathValue("path"))
+		})
+
+		rec, req := makeRequest(mux, "GET", "/assets/js/app.js")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "js/app.js")
+		assertPathValue(t, req, "path", "js/app.js")
+	})
+
+	t.Run("精确路径不吞掉更长路径", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/api/users", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("users"))
+		})
+
+		rec, _ := makeRequest(mux, "GET", "/api/users/123")
+		assertStatusCode(t, rec, http.StatusNotFound)
+	})
+
+	t.Run("更长精确路由优先于multi", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/debug/pprof/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("index"))
+		})
+		mux.Route("/debug/pprof/cmdline", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("cmdline"))
+		})
+
+		rec, _ := makeRequest(mux, "GET", "/debug/pprof/cmdline")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "cmdline")
+
+		rec, _ = makeRequest(mux, "GET", "/debug/pprof/heap")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "index")
+	})
+
+	t.Run("字面深入失败后回退到祖先multi", func(t *testing.T) {
+		// 对齐标准库：/a/ 与 /a/b/c 并存时，/a/b/x 应回退命中 /a/
+		// Aligned with stdlib: with /a/ and /a/b/c, /a/b/x backtracks to /a/
+		mux := createTestMux()
+		mux.Route("/a/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("multi"))
+		})
+		mux.Route("/a/b/c", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("exact"))
+		})
+
+		rec, _ := makeRequest(mux, "GET", "/a/b/c")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "exact")
+
+		rec, _ = makeRequest(mux, "GET", "/a/b/x")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "multi")
+	})
+
+	t.Run("307保留Query", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/debug/pprof/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("index"))
+		})
+		rec, _ := makeRequest(mux, "GET", "/debug/pprof?seconds=1")
+		assertStatusCode(t, rec, http.StatusTemporaryRedirect)
+		if loc := rec.Header().Get("Location"); loc != "/debug/pprof/?seconds=1" {
+			t.Errorf("期望 Location 含 query，得到 %q", loc)
+		}
+	})
+
+	t.Run("命名multi空剩余PathValue为空", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/files/{path...}", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "v=%q", r.PathValue("path"))
+		})
+		// 先 301 到 /files/，再命中空剩余
+		rec, _ := makeRequest(mux, "GET", "/files/")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, `v=""`)
+	})
+
+	t.Run("匿名multi不写PathValue", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/debug/pprof/", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "p=%q", r.PathValue("path"))
+		})
+		rec, req := makeRequest(mux, "GET", "/debug/pprof/heap")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, `p=""`)
+		assertPathValue(t, req, "path", "")
+	})
+
+	t.Run("路径含空段仍可注册", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/a//b/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("ok"))
+		})
+		rec, _ := makeRequest(mux, "GET", "/a/b/x")
+		assertStatusCode(t, rec, http.StatusOK)
+		assertResponseBody(t, rec, "ok")
+	})
+
+	t.Run("multi不在末尾则panic", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic")
+			}
+		}()
+		mux := createTestMux()
+		mux.Route("/files/{path...}/extra", func(w http.ResponseWriter, r *http.Request) {})
+	})
+
+	t.Run("Find公开方法可匹配", func(t *testing.T) {
+		mux := createTestMux()
+		mux.Route("/api/users/:id", func(w http.ResponseWriter, r *http.Request) {})
+		req := httptest.NewRequest("GET", "/api/users/9", nil)
+		n, ok := mux.root.Find("api/users/9", req)
+		if !ok || n == nil {
+			t.Fatal("Find should match")
+		}
+		assertPathValue(t, req, "id", "9")
 	})
 }
 
@@ -755,7 +989,7 @@ func (customHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // TestNode_PathsAndPrint 测试路径获取和打印
 func TestNode_PathsAndPrint(t *testing.T) {
-	node := NewNode("/", nil)
+	node := NewNode("/")
 	node.Add("/a", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	node.Add("/b", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 

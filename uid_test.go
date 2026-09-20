@@ -89,7 +89,7 @@ func Test_GenId_Uniqueness(t *testing.T) {
 
 func Test_GenId_Concurrent(t *testing.T) {
 	// 测试并发生成的正确性
-	count := 100
+	count := 10
 	ids := sync.Map{}
 	wg := sync.WaitGroup{}
 

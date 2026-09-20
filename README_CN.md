@@ -491,6 +491,8 @@ resp, _ := sess.DoRequest(ctx)
 // 输出会显示：DNS 解析、连接建立、TLS 握手、请求/响应详情
 ```
 
+服务端可用 `mux.Pprof()` 挂载 `/debug/pprof/*`，生成 CPU / 内存火焰图的步骤与读法见：[docs/pprof-flamegraph.md](docs/pprof-flamegraph.md)。
+
 ### 请求统计
 
 ```go

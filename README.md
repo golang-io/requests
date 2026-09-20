@@ -491,6 +491,8 @@ resp, _ := sess.DoRequest(ctx)
 // Output shows: DNS resolution, connection establishment, TLS handshake, request/response details
 ```
 
+On the server side, call `mux.Pprof()` to mount `/debug/pprof/*`. How to generate and read CPU/memory flame graphs: [docs/pprof-flamegraph.md](docs/pprof-flamegraph.md).
+
 ### Request Statistics
 
 ```go
