@@ -9,6 +9,11 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Restrict GITHUB_TOKEN to least privilege required by this workflow.
+# 仅授予本流水线所需的最小权限，满足 CodeQL actions/missing-workflow-permissions。
+permissions:
+  contents: read
+
 jobs:
 
   build:
